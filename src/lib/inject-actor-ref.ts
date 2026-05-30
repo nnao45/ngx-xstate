@@ -16,7 +16,9 @@ export function buildActorOptions<TLogic extends AnyActorLogic>(
     systemId: options?.systemId,
     inspect,
     input: input as Parameters<typeof createActor>[1] extends { input?: infer I } ? I : never,
-    snapshot: options?.snapshot as Parameters<typeof createActor>[1] extends { snapshot?: infer S } ? S : never,
+    snapshot: options?.snapshot as Parameters<typeof createActor>[1] extends { snapshot?: infer S }
+      ? S
+      : never,
   };
 }
 
@@ -29,9 +31,8 @@ export function injectActorRef<TLogic extends AnyActorLogic>(
   // Pick up the global devtools inspector if registered via provideXstateDevtools()
   const globalInspector = inject(XSTATE_INSPECTOR, { optional: true });
 
-  const input = typeof options?.input === 'function'
-    ? (options.input as () => unknown)()
-    : options?.input;
+  const input =
+    typeof options?.input === 'function' ? (options.input as () => unknown)() : options?.input;
 
   validateInput(input, schemas);
 
@@ -40,7 +41,9 @@ export function injectActorRef<TLogic extends AnyActorLogic>(
     buildActorOptions(options, input, globalInspector?.inspect.bind(globalInspector)),
   );
   actor.start();
-  destroyRef.onDestroy(() => { actor.stop(); });
+  destroyRef.onDestroy(() => {
+    actor.stop();
+  });
 
   return actor;
 }

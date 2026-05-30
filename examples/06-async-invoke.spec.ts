@@ -19,8 +19,8 @@ interface User {
   name: string;
 }
 
-const fetchUserLogic = fromPromise<User, { userId: number }>(
-  ({ input }) => Promise.resolve({ id: input.userId, name: `User ${input.userId}` }),
+const fetchUserLogic = fromPromise<User, { userId: number }>(({ input }) =>
+  Promise.resolve({ id: input.userId, name: `User ${input.userId}` }),
 );
 
 const fetchMachine = createTypedMachine({
@@ -70,7 +70,7 @@ const failingFetchMachine = createTypedMachine({
     loading: {
       invoke: {
         src: fromPromise(() => Promise.reject(new Error('Network error'))),
-        onDone:  { target: 'success' },
+        onDone: { target: 'success' },
         onError: {
           target: 'error',
           actions: assign({ error: ({ event }) => String(event.error) }),

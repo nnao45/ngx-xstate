@@ -33,7 +33,7 @@ function buildEventSchema(
   const schemas = Array.from(onKeys).map((key): TypedEventSchema => {
     const payload = payloads[key];
     const base = z.object({ type: z.literal(key) });
-    return (payload != null ? base.merge(payload) : base) as TypedEventSchema;
+    return (payload === undefined ? base : base.merge(payload)) as TypedEventSchema;
   });
 
   // Destructure + narrow so neither a non-null assertion nor an `as` cast
@@ -75,16 +75,13 @@ export interface CreateTypedMachineOptions<
 // annotation would have to reproduce XState's full MachineSnapshot generic
 // (impractical) or collapse to AnyActorLogic — which makes SnapshotFrom<>
 // resolve to `any` and breaks snapshot/send typing. Inference preserves it.
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types
 export function createTypedMachine<
   TConfig extends AnyStateConfig & Parameters<typeof createMachine>[0],
-  TPayloads extends Partial<Record<AllEventKeys<TConfig> & string, z.ZodObject<z.ZodRawShape>>> = Record<never, never>,
+  TPayloads extends Partial<Record<AllEventKeys<TConfig> & string, z.ZodObject<z.ZodRawShape>>> =
+    Record<never, never>,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
->(
-  config: TConfig,
-  options?: CreateTypedMachineOptions<TPayloads, TContextSchema, TInputSchema>,
-) {
+>(config: TConfig, options?: CreateTypedMachineOptions<TPayloads, TContextSchema, TInputSchema>) {
   // createMachine receives TConfig directly — TypeScript infers the full machine type
   // (context, events, states) without any 'as' cast losing information
   const machine = createMachine(config);

@@ -14,9 +14,6 @@ export type {
   SendEvent,
 } from './lib/types';
 
-export type {
-  AllEventKeys,
-  TypedEventUnion,
-} from './lib/typed-machine-types';
+export type { AllEventKeys, TypedEventUnion } from './lib/typed-machine-types';
 
 export type { XStateInspector } from './lib/devtools';

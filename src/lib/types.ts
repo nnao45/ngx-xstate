@@ -31,9 +31,7 @@ export type SendEvent<TLogic extends AnyActorLogic> =
     : Parameters<Actor<TLogic>['send']>[0];
 
 export interface InjectActorOptions<TLogic extends AnyActorLogic> {
-  readonly input?: Parameters<Actor<TLogic>['send']> extends never
-    ? never
-    : unknown;
+  readonly input?: Parameters<Actor<TLogic>['send']> extends never ? never : unknown;
   readonly inspect?: (event: InspectionEvent) => void;
   readonly id?: string;
   readonly systemId?: string;
@@ -49,7 +47,5 @@ export interface InjectActorReturn<TLogic extends AnyActorLogic> {
 export interface ActorContext<TLogic extends AnyActorLogic> {
   provideActor(options?: InjectActorOptions<TLogic>): FactoryProvider;
   injectActorRef(): Actor<TLogic>;
-  injectSelector<T>(
-    selector: (snapshot: SnapshotFrom<TLogic>) => T,
-  ): Signal<T>;
+  injectSelector<T>(selector: (snapshot: SnapshotFrom<TLogic>) => T): Signal<T>;
 }

@@ -22,8 +22,16 @@ const formMachine = createTypedMachine(
     states: {
       editing: {
         on: {
-          SET_NAME:  { actions: assign({ name:  ({ event }: { event: { type: 'SET_NAME';  value: string } }) => event.value }) },
-          SET_EMAIL: { actions: assign({ email: ({ event }: { event: { type: 'SET_EMAIL'; value: string } }) => event.value }) },
+          SET_NAME: {
+            actions: assign({
+              name: ({ event }: { event: { type: 'SET_NAME'; value: string } }) => event.value,
+            }),
+          },
+          SET_EMAIL: {
+            actions: assign({
+              email: ({ event }: { event: { type: 'SET_EMAIL'; value: string } }) => event.value,
+            }),
+          },
           SUBMIT: {
             target: 'submitted',
             actions: assign({ submitted: true }),
@@ -35,7 +43,7 @@ const formMachine = createTypedMachine(
   },
   {
     payloads: {
-      SET_NAME:  z.object({ value: z.string() }),
+      SET_NAME: z.object({ value: z.string() }),
       SET_EMAIL: z.object({ value: z.string().email() }),
     },
   },
@@ -63,7 +71,7 @@ describe('03: Context — Form data management', () => {
   it('updates email independently from name', () => {
     const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(formMachine));
 
-    send({ type: 'SET_NAME',  value: 'Alice' });
+    send({ type: 'SET_NAME', value: 'Alice' });
     send({ type: 'SET_EMAIL', value: 'alice@example.com' });
 
     // assign は部分更新 — 他のフィールドは変わらない
@@ -74,7 +82,7 @@ describe('03: Context — Form data management', () => {
   it('transitions to submitted state on SUBMIT', () => {
     const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(formMachine));
 
-    send({ type: 'SET_NAME',  value: 'Alice' });
+    send({ type: 'SET_NAME', value: 'Alice' });
     send({ type: 'SET_EMAIL', value: 'alice@example.com' });
     send({ type: 'SUBMIT' });
 

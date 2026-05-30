@@ -21,7 +21,7 @@ const wizardMachine = createTypedMachine({
         step1: { on: { NEXT: 'step2' } },
         step2: { on: { NEXT: 'step3', BACK: 'step1' } },
         step3: { on: { BACK: 'step2' } },
-        hist:  { type: 'history' },
+        hist: { type: 'history' },
       },
       on: {
         OPEN_SETTINGS: 'settings',

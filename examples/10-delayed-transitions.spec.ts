@@ -16,10 +16,10 @@ const toastMachine = createTypedMachine({
   id: 'toast',
   initial: 'hidden',
   states: {
-    hidden:  { on: { SHOW: 'visible' } },
+    hidden: { on: { SHOW: 'visible' } },
     visible: {
       after: { 3000: 'hidden' },
-      on:    { DISMISS: 'hidden' },
+      on: { DISMISS: 'hidden' },
     },
   },
 });
@@ -30,7 +30,7 @@ const sessionMachine = createTypedMachine({
   states: {
     active: {
       after: { 5000: 'expired' },
-      on:    { ACTIVITY: 'active' },
+      on: { ACTIVITY: 'active' },
     },
     expired: {
       on: { LOGIN: 'active' },
@@ -100,9 +100,7 @@ describe('10: Delayed Transitions', () => {
     });
 
     it('ACTIVITY resets the timer', () => {
-      const { snapshot, send } = TestBed.runInInjectionContext(() =>
-        injectActor(sessionMachine),
-      );
+      const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(sessionMachine));
 
       vi.advanceTimersByTime(2000);
       expect(snapshot().value).toBe('active');

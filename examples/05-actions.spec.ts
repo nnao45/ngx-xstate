@@ -52,18 +52,26 @@ describe('05: Actions', () => {
       initial: 'idle',
       states: {
         idle: {
-          entry: () => { log.push('entered idle'); },
+          entry: () => {
+            log.push('entered idle');
+          },
           on: { START: 'active' },
         },
         active: {
-          entry: () => { log.push('entered active'); },
-          exit:  () => { log.push('exited active'); },
+          entry: () => {
+            log.push('entered active');
+          },
+          exit: () => {
+            log.push('exited active');
+          },
           on: { STOP: 'idle' },
         },
       },
     });
 
-    afterEach(() => { log.length = 0; });
+    afterEach(() => {
+      log.length = 0;
+    });
 
     it('runs entry action when entering active', () => {
       const { send } = TestBed.runInInjectionContext(() => injectActor(machine));
@@ -123,13 +131,17 @@ describe('05: Actions', () => {
           // 複数 action を配列で指定 — 順番通りに実行される
           actions: [
             assign({ count: ({ context }) => context.count + 1 }),
-            () => { sideEffect('logged'); },
+            () => {
+              sideEffect('logged');
+            },
           ],
         },
       },
     });
 
-    afterEach(() => { sideEffect.mockClear(); });
+    afterEach(() => {
+      sideEffect.mockClear();
+    });
 
     it('executes all actions in order', () => {
       const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(machine));

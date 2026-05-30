@@ -25,7 +25,8 @@ const authMachine = createTypedMachine(
           LOGIN: {
             target: 'loggedIn',
             actions: assign({
-              username: ({ event }: { event: { type: 'LOGIN'; username: string } }) => event.username,
+              username: ({ event }: { event: { type: 'LOGIN'; username: string } }) =>
+                event.username,
             }),
           },
         },
@@ -34,7 +35,7 @@ const authMachine = createTypedMachine(
         initial: 'active',
         states: {
           active: { on: { GO_IDLE: 'idle' } },
-          idle:   { on: { WAKE_UP: 'active' } },
+          idle: { on: { WAKE_UP: 'active' } },
         },
         on: {
           LOGOUT: {

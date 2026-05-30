@@ -26,13 +26,14 @@ describe('provideXstateDevtools', () => {
 
     it('injectActor() picks up global inspector automatically', () => {
       const events: InspectionEvent[] = [];
-      const inspector = { inspect: (e: InspectionEvent) => { events.push(e); } };
+      const inspector = {
+        inspect: (e: InspectionEvent) => {
+          events.push(e);
+        },
+      };
 
       TestBed.configureTestingModule({
-        providers: [
-          provideZonelessChangeDetection(),
-          provideXstateDevtools(inspector),
-        ],
+        providers: [provideZonelessChangeDetection(), provideXstateDevtools(inspector)],
       });
 
       TestBed.runInInjectionContext(() => injectActor(counterMachine));
@@ -43,13 +44,14 @@ describe('provideXstateDevtools', () => {
 
     it('injectActorRef() picks up global inspector automatically', () => {
       const events: InspectionEvent[] = [];
-      const inspector = { inspect: (e: InspectionEvent) => { events.push(e); } };
+      const inspector = {
+        inspect: (e: InspectionEvent) => {
+          events.push(e);
+        },
+      };
 
       TestBed.configureTestingModule({
-        providers: [
-          provideZonelessChangeDetection(),
-          provideXstateDevtools(inspector),
-        ],
+        providers: [provideZonelessChangeDetection(), provideXstateDevtools(inspector)],
       });
 
       TestBed.runInInjectionContext(() => injectActorRef(counterMachine));
@@ -60,14 +62,17 @@ describe('provideXstateDevtools', () => {
     it('per-actor inspect overrides global inspector', () => {
       const globalEvents: InspectionEvent[] = [];
       const perActorEvents: InspectionEvent[] = [];
-      const globalInspector = { inspect: (e: InspectionEvent) => { globalEvents.push(e); } };
-      const perActorInspect = (e: InspectionEvent): void => { perActorEvents.push(e); };
+      const globalInspector = {
+        inspect: (e: InspectionEvent) => {
+          globalEvents.push(e);
+        },
+      };
+      const perActorInspect = (e: InspectionEvent): void => {
+        perActorEvents.push(e);
+      };
 
       TestBed.configureTestingModule({
-        providers: [
-          provideZonelessChangeDetection(),
-          provideXstateDevtools(globalInspector),
-        ],
+        providers: [provideZonelessChangeDetection(), provideXstateDevtools(globalInspector)],
       });
 
       TestBed.runInInjectionContext(() =>
@@ -81,7 +86,11 @@ describe('provideXstateDevtools', () => {
 
     it('createActorContext.provideActor() picks up global inspector', () => {
       const events: InspectionEvent[] = [];
-      const inspector = { inspect: (e: InspectionEvent) => { events.push(e); } };
+      const inspector = {
+        inspect: (e: InspectionEvent) => {
+          events.push(e);
+        },
+      };
 
       @Component({
         selector: 'test-ctx-devtools',
@@ -94,10 +103,7 @@ describe('provideXstateDevtools', () => {
       }
 
       TestBed.configureTestingModule({
-        providers: [
-          provideZonelessChangeDetection(),
-          provideXstateDevtools(inspector),
-        ],
+        providers: [provideZonelessChangeDetection(), provideXstateDevtools(inspector)],
       });
 
       TestBed.createComponent(TestComponent);
@@ -118,20 +124,23 @@ describe('provideXstateDevtools', () => {
     it('accepts any object with inspect method (not just @statelyai/inspect)', () => {
       const calls: string[] = [];
       const customInspector = {
-        inspect: (e: InspectionEvent) => { calls.push(e.type); },
+        inspect: (e: InspectionEvent) => {
+          calls.push(e.type);
+        },
       };
 
       TestBed.configureTestingModule({
-        providers: [
-          provideZonelessChangeDetection(),
-          provideXstateDevtools(customInspector),
-        ],
+        providers: [provideZonelessChangeDetection(), provideXstateDevtools(customInspector)],
       });
 
-      TestBed.runInInjectionContext(() => injectActor(createTypedMachine({
-        initial: 'a',
-        states: { a: { on: { GO: 'b' } }, b: {} },
-      })));
+      TestBed.runInInjectionContext(() =>
+        injectActor(
+          createTypedMachine({
+            initial: 'a',
+            states: { a: { on: { GO: 'b' } }, b: {} },
+          }),
+        ),
+      );
 
       expect(calls.length).toBeGreaterThan(0);
     });

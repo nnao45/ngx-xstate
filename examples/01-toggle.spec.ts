@@ -17,7 +17,7 @@ const toggleMachine = createTypedMachine({
   initial: 'inactive',
   states: {
     inactive: { on: { TOGGLE: 'active' } },
-    active:   { on: { TOGGLE: 'inactive' } },
+    active: { on: { TOGGLE: 'inactive' } },
   },
 });
 

@@ -1,4 +1,9 @@
-import { isDevMode, InjectionToken, makeEnvironmentProviders, type EnvironmentProviders } from '@angular/core';
+import {
+  isDevMode,
+  InjectionToken,
+  makeEnvironmentProviders,
+  type EnvironmentProviders,
+} from '@angular/core';
 import type { InspectionEvent } from 'xstate';
 
 export interface XStateInspector {
@@ -28,7 +33,5 @@ export function provideXstateDevtools(inspector: XStateInspector): EnvironmentPr
     return makeEnvironmentProviders([]);
   }
 
-  return makeEnvironmentProviders([
-    { provide: XSTATE_INSPECTOR, useValue: inspector },
-  ]);
+  return makeEnvironmentProviders([{ provide: XSTATE_INSPECTOR, useValue: inspector }]);
 }

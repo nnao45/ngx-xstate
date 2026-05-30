@@ -8,7 +8,7 @@
  */
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign, createMachine } from 'xstate';
 import { z } from 'zod';
 import {
@@ -88,8 +88,8 @@ describe('12-A: createActorContext — shared actor via Angular DI', () => {
       providers: [CounterContext.provideActor()],
     })
     class SharedParent {
-      actor  = CounterContext.injectActorRef();
-      count  = CounterContext.injectSelector((s) => s.context.count);
+      actor = CounterContext.injectActorRef();
+      count = CounterContext.injectSelector((s) => s.context.count);
     }
 
     const fixture = TestBed.createComponent(SharedParent);
@@ -173,16 +173,36 @@ const todoMachine = createTypedMachine(
     id: 'todo',
     context: { items: [] as string[] },
     on: {
-      ADD:    { actions: assign({ items: ({ context, event }: { context: { items: string[] }; event: { type: 'ADD'; item: string } }) => [...context.items, event.item] }) },
-      REMOVE: { actions: assign({ items: ({ context, event }: { context: { items: string[] }; event: { type: 'REMOVE'; index: number } }) => context.items.filter((_, i) => i !== event.index) }) },
-      CLEAR:  { actions: assign({ items: [] }) },
+      ADD: {
+        actions: assign({
+          items: ({
+            context,
+            event,
+          }: {
+            context: { items: string[] };
+            event: { type: 'ADD'; item: string };
+          }) => [...context.items, event.item],
+        }),
+      },
+      REMOVE: {
+        actions: assign({
+          items: ({
+            context,
+            event,
+          }: {
+            context: { items: string[] };
+            event: { type: 'REMOVE'; index: number };
+          }) => context.items.filter((_, i) => i !== event.index),
+        }),
+      },
+      CLEAR: { actions: assign({ items: [] }) },
     },
   },
   {
     // ADD と REMOVE はペイロードを Zod で型付け
     // CLEAR はペイロードなし → on キーから自動生成される
     payloads: {
-      ADD:    z.object({ item: z.string().min(1) }),
+      ADD: z.object({ item: z.string().min(1) }),
       REMOVE: z.object({ index: z.number().int().nonnegative() }),
     },
     context: z.object({ items: z.array(z.string()) }),
@@ -247,7 +267,11 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
         id: 'strict',
         context: { value: 0 },
         on: {
-          SET: { actions: assign({ value: ({ event }: { event: { type: 'SET'; n: number } }) => event.n }) },
+          SET: {
+            actions: assign({
+              value: ({ event }: { event: { type: 'SET'; n: number } }) => event.n,
+            }),
+          },
         },
       },
       {
@@ -258,7 +282,9 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
 
     const { send } = TestBed.runInInjectionContext(() => injectActor(strictMachine));
 
-    expect(() => { send({ type: 'UNKNOWN' } as never); }).toThrow();
+    expect(() => {
+      send({ type: 'UNKNOWN' } as never);
+    }).toThrow();
   });
 
   describe('dynamic input with injectActor', () => {
@@ -288,7 +314,7 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
       })
       class DynamicComponent {
         userId = signal('user-A');
-        state  = injectActor(machineWithInput, {
+        state = injectActor(machineWithInput, {
           input: () => ({ userId: this.userId() }),
         });
       }
@@ -307,9 +333,7 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
 
   describe('injectSelector with shallow equal', () => {
     it('only updates Signal when selected value actually changes', () => {
-      const actorRef = TestBed.runInInjectionContext(() =>
-        injectActorRef(todoMachine),
-      );
+      const actorRef = TestBed.runInInjectionContext(() => injectActorRef(todoMachine));
       const items = TestBed.runInInjectionContext(() =>
         injectSelector(actorRef, (s) => s.context.items),
       );

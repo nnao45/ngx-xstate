@@ -1,9 +1,4 @@
-import {
-  inject,
-  InjectionToken,
-  type FactoryProvider,
-  type Signal,
-} from '@angular/core';
+import { inject, InjectionToken, type FactoryProvider, type Signal } from '@angular/core';
 import type { Actor, AnyActorLogic, SnapshotFrom } from 'xstate';
 import { injectActorRef } from './inject-actor-ref';
 import { injectSelector } from './inject-selector';
@@ -31,8 +26,8 @@ export function createActorContext<TLogic extends AnyActorLogic>(
     if (actor == null) {
       throw new Error(
         '[ngx-xstate] injectActorRef() was called outside of a component ' +
-        'that provides this actor. ' +
-        'Make sure to add provideActor() to the component\'s providers array.',
+          'that provides this actor. ' +
+          "Make sure to add provideActor() to the component's providers array.",
       );
     }
     return actor;
@@ -40,9 +35,7 @@ export function createActorContext<TLogic extends AnyActorLogic>(
 
   const contextInjectActorRef = (): Actor<TLogic> => resolveActorRef();
 
-  const contextInjectSelector = <T>(
-    selector: (snapshot: SnapshotFrom<TLogic>) => T,
-  ): Signal<T> => {
+  const contextInjectSelector = <T>(selector: (snapshot: SnapshotFrom<TLogic>) => T): Signal<T> => {
     const actor = resolveActorRef();
     return injectSelector(actor, selector);
   };

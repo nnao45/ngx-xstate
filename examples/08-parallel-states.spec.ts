@@ -19,22 +19,22 @@ const mediaPlayerMachine = createTypedMachine({
     playback: {
       initial: 'paused',
       states: {
-        paused:  { on: { PLAY:  'playing' } },
-        playing: { on: { PAUSE: 'paused'  } },
+        paused: { on: { PLAY: 'playing' } },
+        playing: { on: { PAUSE: 'paused' } },
       },
     },
     volume: {
       initial: 'unmuted',
       states: {
-        unmuted: { on: { MUTE:   'muted'   } },
-        muted:   { on: { UNMUTE: 'unmuted' } },
+        unmuted: { on: { MUTE: 'muted' } },
+        muted: { on: { UNMUTE: 'unmuted' } },
       },
     },
     fullscreen: {
       initial: 'windowed',
       states: {
-        windowed:   { on: { ENTER_FULLSCREEN: 'fullscreen' } },
-        fullscreen: { on: { EXIT_FULLSCREEN:  'windowed'   } },
+        windowed: { on: { ENTER_FULLSCREEN: 'fullscreen' } },
+        fullscreen: { on: { EXIT_FULLSCREEN: 'windowed' } },
       },
     },
   },
@@ -49,68 +49,60 @@ describe('08: Parallel States — Media player', () => {
     const { snapshot } = TestBed.runInInjectionContext(() => injectActor(mediaPlayerMachine));
 
     expect(snapshot().value).toEqual({
-      playback:   'paused',
-      volume:     'unmuted',
+      playback: 'paused',
+      volume: 'unmuted',
       fullscreen: 'windowed',
     });
   });
 
   it('transitions only the playback region on PLAY', () => {
-    const { snapshot, send } = TestBed.runInInjectionContext(() =>
-      injectActor(mediaPlayerMachine),
-    );
+    const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(mediaPlayerMachine));
 
     send({ type: 'PLAY' });
 
     // PLAY は playback 領域だけ変化させる — 他は独立して変わらない
     expect(snapshot().value).toEqual({
-      playback:   'playing',
-      volume:     'unmuted',
+      playback: 'playing',
+      volume: 'unmuted',
       fullscreen: 'windowed',
     });
   });
 
   it('each region is fully independent', () => {
-    const { snapshot, send } = TestBed.runInInjectionContext(() =>
-      injectActor(mediaPlayerMachine),
-    );
+    const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(mediaPlayerMachine));
 
     send({ type: 'PLAY' });
     send({ type: 'MUTE' });
     send({ type: 'ENTER_FULLSCREEN' });
 
     expect(snapshot().value).toEqual({
-      playback:   'playing',
-      volume:     'muted',
+      playback: 'playing',
+      volume: 'muted',
       fullscreen: 'fullscreen',
     });
   });
 
   it('can query individual region with matches()', () => {
-    const { snapshot, send } = TestBed.runInInjectionContext(() =>
-      injectActor(mediaPlayerMachine),
-    );
+    const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(mediaPlayerMachine));
 
     send({ type: 'PLAY' });
     send({ type: 'MUTE' });
 
-    expect(snapshot().matches({ playback: 'playing'  })).toBe(true);
-    expect(snapshot().matches({ volume:   'muted'    })).toBe(true);
+    expect(snapshot().matches({ playback: 'playing' })).toBe(true);
+    expect(snapshot().matches({ volume: 'muted' })).toBe(true);
     expect(snapshot().matches({ fullscreen: 'windowed' })).toBe(true);
   });
 
   it('pausing does not affect volume or fullscreen', () => {
-    const { snapshot, send } = TestBed.runInInjectionContext(() =>
-      injectActor(mediaPlayerMachine),
-    );
+    const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(mediaPlayerMachine));
 
     send({ type: 'PLAY' });
     send({ type: 'MUTE' });
     send({ type: 'PAUSE' });
 
     expect(snapshot().value).toEqual({
-      playback:   'paused',
-      volume:     'muted',
+      playback: 'paused',
+      volume: 'muted',
       fullscreen: 'windowed',
     });
   });

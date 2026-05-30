@@ -38,11 +38,9 @@ export function defineActorWithSchema<
     strict: schemas.strict ?? false,
   };
 
-  return Object.assign(
-    Object.create(Object.getPrototypeOf(logic) as object) as TLogic,
-    logic,
-    { [SCHEMAS_KEY]: payload },
-  ) as SchematizedActor<TLogic, TCtx, TEvents, TInput>;
+  return Object.assign(Object.create(Object.getPrototypeOf(logic) as object) as TLogic, logic, {
+    [SCHEMAS_KEY]: payload,
+  }) as SchematizedActor<TLogic, TCtx, TEvents, TInput>;
 }
 
 export function getSchemas(logic: AnyActorLogic): SchemasPayload | undefined {

@@ -41,7 +41,7 @@ const authMachine = createTypedMachine({
     loggedIn: {
       initial: 'user',
       states: {
-        user:  {},
+        user: {},
         admin: {},
       },
       on: { LOGOUT: 'loggedOut' },
@@ -89,9 +89,7 @@ describe('04: Guards — conditional transitions', () => {
 
   describe('auth guard', () => {
     it('transitions to loggedIn on LOGIN', () => {
-      const { snapshot, send } = TestBed.runInInjectionContext(() =>
-        injectActor(authMachine),
-      );
+      const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(authMachine));
 
       send({ type: 'LOGIN' });
 

@@ -30,7 +30,11 @@ const machine = createTypedMachine({
 describe('provideXstateDevtools — production mode (isDevMode false)', () => {
   it('does not connect the inspector to actors', () => {
     const events: InspectionEvent[] = [];
-    const inspector = { inspect: (e: InspectionEvent) => { events.push(e); } };
+    const inspector = {
+      inspect: (e: InspectionEvent) => {
+        events.push(e);
+      },
+    };
 
     TestBed.configureTestingModule({
       providers: [

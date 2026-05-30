@@ -19,7 +19,7 @@ const counterMachine = createTypedMachine({
   on: {
     INCREMENT: { actions: assign({ count: ({ context }) => context.count + 1 }) },
     DECREMENT: { actions: assign({ count: ({ context }) => context.count - 1 }) },
-    RESET:     { actions: assign({ count: 0 }) },
+    RESET: { actions: assign({ count: 0 }) },
   },
 });
 

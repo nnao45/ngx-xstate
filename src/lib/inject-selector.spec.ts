@@ -24,7 +24,9 @@ const counterMachine = createMachine({
 
 function runInInjectionContext<T>(fn: () => T): T {
   let result!: T;
-  TestBed.runInInjectionContext(() => { result = fn(); });
+  TestBed.runInInjectionContext(() => {
+    result = fn();
+  });
   return result;
 }
 
@@ -35,17 +37,13 @@ describe('injectSelector', () => {
 
   it('returns initial selected value', () => {
     const actor = createActor(counterMachine).start();
-    const count = runInInjectionContext(() =>
-      injectSelector(actor, (s) => s.context.count),
-    );
+    const count = runInInjectionContext(() => injectSelector(actor, (s) => s.context.count));
     expect(count()).toBe(0);
   });
 
   it('updates signal when selected value changes', () => {
     const actor = createActor(counterMachine).start();
-    const count = runInInjectionContext(() =>
-      injectSelector(actor, (s) => s.context.count),
-    );
+    const count = runInInjectionContext(() => injectSelector(actor, (s) => s.context.count));
 
     actor.send({ type: 'INCREMENT' });
     expect(count()).toBe(1);
@@ -57,9 +55,7 @@ describe('injectSelector', () => {
   it('signal value does not change when selected value is unchanged', () => {
     const actor = createActor(counterMachine).start();
 
-    const count = runInInjectionContext(() =>
-      injectSelector(actor, (s) => s.context.count),
-    );
+    const count = runInInjectionContext(() => injectSelector(actor, (s) => s.context.count));
 
     const valueBefore = count();
     actor.send({ type: 'SET_LABEL', value: 'new label' });
@@ -70,9 +66,7 @@ describe('injectSelector', () => {
 
   it('returns a readonly signal', () => {
     const actor = createActor(counterMachine).start();
-    const selected = runInInjectionContext(() =>
-      injectSelector(actor, (s) => s.context.count),
-    );
+    const selected = runInInjectionContext(() => injectSelector(actor, (s) => s.context.count));
     expect('set' in selected).toBe(false);
     expect('update' in selected).toBe(false);
   });
@@ -80,9 +74,7 @@ describe('injectSelector', () => {
   it('applies shallow equal by default for object selection', () => {
     const actor = createActor(counterMachine).start();
 
-    const ctx = runInInjectionContext(() =>
-      injectSelector(actor, (s) => s.context),
-    );
+    const ctx = runInInjectionContext(() => injectSelector(actor, (s) => s.context));
 
     const before = ctx();
     actor.send({ type: 'INCREMENT' });

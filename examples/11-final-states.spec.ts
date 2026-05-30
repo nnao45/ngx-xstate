@@ -23,7 +23,7 @@ const checkoutMachine = createTypedMachine({
     },
     payment: {
       on: {
-        PAY:    'processing',
+        PAY: 'processing',
         CANCEL: 'cart',
       },
     },
@@ -50,10 +50,10 @@ const onboardingMachine = createTypedMachine({
   id: 'onboarding',
   initial: 'welcome',
   states: {
-    welcome:     { on: { NEXT: 'profile' } },
-    profile:     { on: { NEXT: 'preferences', BACK: 'welcome' } },
+    welcome: { on: { NEXT: 'profile' } },
+    profile: { on: { NEXT: 'preferences', BACK: 'welcome' } },
     preferences: { on: { COMPLETE: 'finished' } },
-    finished:    { type: 'final' },
+    finished: { type: 'final' },
   },
 });
 
@@ -69,13 +69,13 @@ describe('11: Final States', () => {
     });
 
     it('completes full checkout flow', async () => {
-      const { snapshot, send } = TestBed.runInInjectionContext(() =>
-        injectActor(checkoutMachine),
-      );
+      const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(checkoutMachine));
 
       send({ type: 'PROCEED_TO_PAYMENT' });
       send({ type: 'PAY' });
-      await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
 
       expect(snapshot().value).toBe('confirmation');
       expect(snapshot().context.orderId).toBe('ORD-001');
@@ -86,13 +86,13 @@ describe('11: Final States', () => {
     });
 
     it('actor status is "done" when in final state', async () => {
-      const { snapshot, send } = TestBed.runInInjectionContext(() =>
-        injectActor(checkoutMachine),
-      );
+      const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(checkoutMachine));
 
       send({ type: 'PROCEED_TO_PAYMENT' });
       send({ type: 'PAY' });
-      await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      });
       send({ type: 'FINISH' });
 
       // final state に到達すると actor の status が 'done' になる
@@ -100,9 +100,7 @@ describe('11: Final States', () => {
     });
 
     it('can cancel from payment and return to cart', () => {
-      const { snapshot, send } = TestBed.runInInjectionContext(() =>
-        injectActor(checkoutMachine),
-      );
+      const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(checkoutMachine));
 
       send({ type: 'PROCEED_TO_PAYMENT' });
       send({ type: 'CANCEL' });

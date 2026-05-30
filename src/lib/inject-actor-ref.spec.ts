@@ -19,13 +19,13 @@ const counterMachine = createMachine({
   },
 });
 
-const eventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('INCREMENT') }),
-]);
+const eventSchema = z.discriminatedUnion('type', [z.object({ type: z.literal('INCREMENT') })]);
 
 function runInInjectionContext<T>(fn: () => T): T {
   let result!: T;
-  TestBed.runInInjectionContext(() => { result = fn(); });
+  TestBed.runInInjectionContext(() => {
+    result = fn();
+  });
   return result;
 }
 
@@ -78,7 +78,6 @@ describe('injectActorRef', () => {
     );
     expect(actor.getSnapshot().context.count).toBe(99);
   });
-
 
   it('warns on invalid input when strict=false', () => {
     const inputSchema = z.object({ count: z.number() });

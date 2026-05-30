@@ -25,7 +25,9 @@ const counterMachine = createTypedMachine({
   id: 'devtoolsCounter',
   context: { count: 0 },
   on: {
-    INCREMENT: { actions: assign({ count: ({ context }) => context.count + 1 }) },
+    INCREMENT: {
+      actions: assign({ count: ({ context }) => context.count + 1 }),
+    },
   },
 });
 
@@ -42,7 +44,11 @@ describe('13: Devtools', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideXstateDevtools({ inspect: (e) => { events.push(e); } }),
+        provideXstateDevtools({
+          inspect: (e) => {
+            events.push(e);
+          },
+        }),
       ],
     });
 
@@ -70,7 +76,11 @@ describe('13: Devtools', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideXstateDevtools({ inspect: (e) => { events.push(e); } }),
+        provideXstateDevtools({
+          inspect: (e) => {
+            events.push(e);
+          },
+        }),
       ],
     });
 
@@ -86,12 +96,20 @@ describe('13: Devtools', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        provideXstateDevtools({ inspect: (e) => { globalEvents.push(e); } }),
+        provideXstateDevtools({
+          inspect: (e) => {
+            globalEvents.push(e);
+          },
+        }),
       ],
     });
 
     TestBed.runInInjectionContext(() =>
-      injectActor(counterMachine, { inspect: (e) => { localEvents.push(e); } }),
+      injectActor(counterMachine, {
+        inspect: (e) => {
+          localEvents.push(e);
+        },
+      }),
     );
 
     // この actor は per-actor inspect に流れ、global には流れない
@@ -104,9 +122,7 @@ describe('13: Devtools', () => {
       providers: [provideZonelessChangeDetection()],
     });
 
-    const { snapshot, send } = TestBed.runInInjectionContext(() =>
-      injectActor(counterMachine),
-    );
+    const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(counterMachine));
     send({ type: 'INCREMENT' });
 
     expect(snapshot().context.count).toBe(1);

@@ -16,7 +16,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --project tsconfig.lib.json --noEmit",
-    "lint": "eslint src"
+    "lint": "oxlint --deny-warnings src examples",
+    "format": "oxfmt --write 'src/**/*.ts' 'examples/**/*.ts'",
+    "format:check": "oxfmt --check 'src/**/*.ts' 'examples/**/*.ts'",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
   },
   "peerDependencies": {
     "@angular/core": ">=20.0.0",
@@ -32,8 +35,9 @@
     "@vitest/coverage-v8": "^3.2.4",
     "jsdom": "^25.0.0",
     "ng-packagr": "^20.3.2",
+    "oxfmt": "^0.52.0",
+    "oxlint": "^1.67.0",
     "typescript": "~5.8.0",
-    "typescript-eslint": "^8.60.0",
     "vitest": "^3.0.0",
     "xstate": "^5.32.0",
     "zod": "^3.24.0"

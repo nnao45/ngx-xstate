@@ -2,10 +2,7 @@ import { DestroyRef, inject, signal, type Signal } from '@angular/core';
 import type { AnyActorRef, SnapshotFrom } from 'xstate';
 import { shallowEqual } from './shallow-equal';
 
-export function injectSelector<
-  TActor extends Pick<AnyActorRef, 'subscribe' | 'getSnapshot'>,
-  T,
->(
+export function injectSelector<TActor extends Pick<AnyActorRef, 'subscribe' | 'getSnapshot'>, T>(
   actor: TActor,
   selector: (snapshot: SnapshotFrom<TActor>) => T,
 ): Signal<T> {

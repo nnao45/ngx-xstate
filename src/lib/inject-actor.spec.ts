@@ -27,7 +27,9 @@ const eventSchema = z.discriminatedUnion('type', [
 
 function runInInjectionContext<T>(fn: () => T): T {
   let result!: T;
-  TestBed.runInInjectionContext(() => { result = fn(); });
+  TestBed.runInInjectionContext(() => {
+    result = fn();
+  });
   return result;
 }
 
@@ -107,7 +109,9 @@ describe('injectActor', () => {
         strict: true,
       });
       const { send } = runInInjectionContext(() => injectActor(machine));
-      expect(() => { send({ type: 'RESET' } as never); }).toThrow();
+      expect(() => {
+        send({ type: 'RESET' } as never);
+      }).toThrow();
     });
   });
 
@@ -176,7 +180,12 @@ describe('injectActor', () => {
         states: {
           active: {
             on: {
-              INC: { actions: assign({ count: ({ context }: { context: { userId: string; count: number } }) => context.count + 1 }) },
+              INC: {
+                actions: assign({
+                  count: ({ context }: { context: { userId: string; count: number } }) =>
+                    context.count + 1,
+                }),
+              },
             },
           },
         },

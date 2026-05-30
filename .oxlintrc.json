@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "error"
+  },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/consistent-type-imports": "error",
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-console": "off",
+    "no-inline-comments": "off",
+    "max-lines-per-function": ["error", 80],
+    "import/no-default-export": "error",
+    "unicorn/no-useless-undefined": "off",
+    "unicorn/no-array-for-each": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.spec.ts", "examples/**/*.ts"],
+      "rules": {
+        "import/no-default-export": "off",
+        "max-classes-per-file": "off",
+        "max-lines-per-function": "off",
+        "max-lines": "off"
+      }
+    }
+  ]
+}

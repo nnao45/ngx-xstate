@@ -1,5 +1,11 @@
 import { DestroyRef, effect, inject, signal, untracked } from '@angular/core';
-import { createActor, type Actor, type AnyActorLogic, type SnapshotFrom, type Subscription } from 'xstate';
+import {
+  createActor,
+  type Actor,
+  type AnyActorLogic,
+  type SnapshotFrom,
+  type Subscription,
+} from 'xstate';
 import { getSchemas } from './define-actor-with-schema';
 import { buildActorOptions, injectActorRef, validateAndSend } from './inject-actor-ref';
 import type { InjectActorOptions, InjectActorReturn, SendEvent } from './types';
@@ -25,16 +31,15 @@ function buildStaticActor<TLogic extends AnyActorLogic>(
 ): InjectActorReturn<TLogic> {
   const actorRef = injectActorRef(logic, options);
 
-  const snapshotSig = signal<SnapshotFrom<TLogic>>(
-    actorRef.getSnapshot(),
-    { equal: shallowEqual },
-  );
+  const snapshotSig = signal<SnapshotFrom<TLogic>>(actorRef.getSnapshot(), { equal: shallowEqual });
 
   const sub = actorRef.subscribe((s) => {
     snapshotSig.set(s);
   });
 
-  inject(DestroyRef).onDestroy(() => { sub.unsubscribe(); });
+  inject(DestroyRef).onDestroy(() => {
+    sub.unsubscribe();
+  });
 
   const send = (event: SendEvent<TLogic>): void => {
     validateAndSend(actorRef, event as Parameters<Actor<TLogic>['send']>[0], schemas);
@@ -52,15 +57,11 @@ function buildDynamicActor<TLogic extends AnyActorLogic>(
   const inputFn = options.input as () => unknown;
 
   const initialInput = inputFn();
-  let currentActor = createActor(
-    logic,
-    buildActorOptions(options, initialInput),
-  );
+  let currentActor = createActor(logic, buildActorOptions(options, initialInput));
 
-  const snapshotSig = signal<SnapshotFrom<TLogic>>(
-    currentActor.getSnapshot(),
-    { equal: shallowEqual },
-  );
+  const snapshotSig = signal<SnapshotFrom<TLogic>>(currentActor.getSnapshot(), {
+    equal: shallowEqual,
+  });
 
   let sub: Subscription = currentActor.subscribe((s) => {
     snapshotSig.set(s);
@@ -80,10 +81,7 @@ function buildDynamicActor<TLogic extends AnyActorLogic>(
       sub.unsubscribe();
       currentActor.stop();
 
-      currentActor = createActor(
-        logic,
-        buildActorOptions(options, newInput),
-      );
+      currentActor = createActor(logic, buildActorOptions(options, newInput));
 
       sub = currentActor.subscribe((s) => {
         snapshotSig.set(s);
@@ -94,16 +92,14 @@ function buildDynamicActor<TLogic extends AnyActorLogic>(
   });
 
   const send = (event: SendEvent<TLogic>): void => {
-    validateAndSend(
-      currentActor,
-      event as Parameters<Actor<TLogic>['send']>[0],
-      schemas,
-    );
+    validateAndSend(currentActor, event as Parameters<Actor<TLogic>['send']>[0], schemas);
   };
 
   return {
     snapshot: snapshotSig.asReadonly(),
     send,
-    get actorRef(): Actor<TLogic> { return currentActor; },
+    get actorRef(): Actor<TLogic> {
+      return currentActor;
+    },
   };
 }

@@ -8,7 +8,9 @@ import { injectActor } from './inject-actor';
 
 function run<T>(fn: () => T): T {
   let result!: T;
-  TestBed.runInInjectionContext(() => { result = fn(); });
+  TestBed.runInInjectionContext(() => {
+    result = fn();
+  });
   return result;
 }
 
@@ -19,7 +21,7 @@ const toggleMachine = createTypedMachine({
   initial: 'inactive',
   states: {
     inactive: { on: { TOGGLE: 'active' } },
-    active:   { on: { TOGGLE: 'inactive' } },
+    active: { on: { TOGGLE: 'inactive' } },
   },
 });
 
@@ -30,9 +32,21 @@ const counterMachine = createTypedMachine(
     id: 'counter',
     context: { count: 0 },
     on: {
-      INCREMENT: { actions: assign({ count: ({ context }: { context: { count: number } }) => context.count + 1 }) },
-      DECREMENT: { actions: assign({ count: ({ context }: { context: { count: number } }) => context.count - 1 }) },
-      SET:       { actions: assign({ count: ({ event }: { event: { type: 'SET'; value: number } }) => event.value }) },
+      INCREMENT: {
+        actions: assign({
+          count: ({ context }: { context: { count: number } }) => context.count + 1,
+        }),
+      },
+      DECREMENT: {
+        actions: assign({
+          count: ({ context }: { context: { count: number } }) => context.count - 1,
+        }),
+      },
+      SET: {
+        actions: assign({
+          count: ({ event }: { event: { type: 'SET'; value: number } }) => event.value,
+        }),
+      },
     },
   },
   {
@@ -53,7 +67,7 @@ const authMachine = createTypedMachine({
       initial: 'active',
       states: {
         active: { on: { GO_IDLE: 'idle' } },
-        idle:   { on: { WAKE_UP: 'active' } },
+        idle: { on: { WAKE_UP: 'active' } },
       },
       on: { LOGOUT: 'loggedOut' },
     },
@@ -120,7 +134,11 @@ describe('createTypedMachine', () => {
           id: 'strict',
           context: { value: 0 },
           on: {
-            SET: { actions: assign({ value: ({ event }: { event: { type: 'SET'; n: number } }) => event.n }) },
+            SET: {
+              actions: assign({
+                value: ({ event }: { event: { type: 'SET'; n: number } }) => event.n,
+              }),
+            },
           },
         },
         {
@@ -130,7 +148,9 @@ describe('createTypedMachine', () => {
       );
 
       const { send } = run(() => injectActor(strictMachine));
-      expect(() => { send({ type: 'SET', n: 'bad' } as never); }).toThrow();
+      expect(() => {
+        send({ type: 'SET', n: 'bad' } as never);
+      }).toThrow();
     });
   });
 
@@ -173,14 +193,16 @@ describe('createTypedMachine', () => {
           initial: 'off',
           states: {
             off: { on: { ON: 'on' } },
-            on:  { on: { OFF: 'off' } },
+            on: { on: { OFF: 'off' } },
           },
         },
         { strict: true },
       );
 
       const { send } = run(() => injectActor(machine));
-      expect(() => { send({ type: 'NOPE' } as never); }).toThrow();
+      expect(() => {
+        send({ type: 'NOPE' } as never);
+      }).toThrow();
     });
   });
 
@@ -190,7 +212,13 @@ describe('createTypedMachine', () => {
         {
           id: 'withContext',
           context: { count: 0 },
-          on: { INC: { actions: assign({ count: ({ context }: { context: { count: number } }) => context.count + 1 }) } },
+          on: {
+            INC: {
+              actions: assign({
+                count: ({ context }: { context: { count: number } }) => context.count + 1,
+              }),
+            },
+          },
         },
         {
           context: z.object({ count: z.number() }),
@@ -211,7 +239,7 @@ describe('createTypedMachine', () => {
         playback: {
           initial: 'paused',
           states: {
-            paused:  { on: { PLAY: 'playing' } },
+            paused: { on: { PLAY: 'playing' } },
             playing: { on: { PAUSE: 'paused' } },
           },
         },
@@ -219,7 +247,7 @@ describe('createTypedMachine', () => {
           initial: 'unmuted',
           states: {
             unmuted: { on: { MUTE: 'muted' } },
-            muted:   { on: { UNMUTE: 'unmuted' } },
+            muted: { on: { UNMUTE: 'unmuted' } },
           },
         },
       },
