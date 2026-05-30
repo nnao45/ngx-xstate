@@ -9,7 +9,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['src/lib/**/*.ts'],
-      exclude: ['src/lib/types.ts'],
+      exclude: ['src/lib/types.ts', 'src/lib/typed-machine-types.ts'],
       thresholds: {
         lines: 100,
         functions: 100,

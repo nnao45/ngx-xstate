@@ -3,8 +3,8 @@
  *
  * このファイルは ngx-xstate 固有の API を示す。
  *
- * Section A: createActorContext — Angular DI でコンポーネントツリーに actor を共有
- * Section B: defineActorWithSchema — Zod で型安全な machine を定義
+ * Section A: createActorContext    — Angular DI でコンポーネントツリーに actor を共有
+ * Section B: createTypedMachine    — on キー自動推論 + Zod ペイロード検証
  */
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -13,7 +13,7 @@ import { assign, createMachine } from 'xstate';
 import { z } from 'zod';
 import {
   createActorContext,
-  defineActorWithSchema,
+  createTypedMachine,
   injectActor,
   injectActorRef,
   injectSelector,
@@ -163,21 +163,13 @@ describe('12-A: createActorContext — shared actor via Angular DI', () => {
 });
 
 // =====================================================================
-// Section B: defineActorWithSchema — Zod 型安全 machine
+// Section B: createTypedMachine — on キー自動推論 + Zod ペイロード検証
 // =====================================================================
 
-const eventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('ADD'),    item: z.string().min(1) }),
-  z.object({ type: z.literal('REMOVE'), index: z.number().int().nonnegative() }),
-  z.object({ type: z.literal('CLEAR') }),
-]);
-
-const contextSchema = z.object({
-  items: z.array(z.string()),
-});
-
-const todoMachine = defineActorWithSchema(
-  createMachine({
+// createTypedMachine: on キーからイベント型を自動推論。
+// ペイロードがあるイベントだけ payloads に Zod スキーマを追加する。
+const todoMachine = createTypedMachine(
+  {
     id: 'todo',
     context: { items: [] as string[] },
     on: {
@@ -185,15 +177,20 @@ const todoMachine = defineActorWithSchema(
       REMOVE: { actions: assign({ items: ({ context, event }: { context: { items: string[] }; event: { type: 'REMOVE'; index: number } }) => context.items.filter((_, i) => i !== event.index) }) },
       CLEAR:  { actions: assign({ items: [] }) },
     },
-  }),
+  },
   {
-    context: contextSchema,
-    events:  eventSchema,
-    strict:  false, // 不正イベントは warn + no-op
+    // ADD と REMOVE はペイロードを Zod で型付け
+    // CLEAR はペイロードなし → on キーから自動生成される
+    payloads: {
+      ADD:    z.object({ item: z.string().min(1) }),
+      REMOVE: z.object({ index: z.number().int().nonnegative() }),
+    },
+    context: z.object({ items: z.array(z.string()) }),
+    strict: false, // 不正イベントは warn + no-op
   },
 );
 
-describe('12-B: defineActorWithSchema — Zod-typed machine', () => {
+describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   });
@@ -245,18 +242,16 @@ describe('12-B: defineActorWithSchema — Zod-typed machine', () => {
   });
 
   it('strict mode throws on invalid event', () => {
-    const strictMachine = defineActorWithSchema(
-      createMachine({
+    const strictMachine = createTypedMachine(
+      {
         id: 'strict',
         context: { value: 0 },
         on: {
           SET: { actions: assign({ value: ({ event }: { event: { type: 'SET'; n: number } }) => event.n }) },
         },
-      }),
+      },
       {
-        events: z.discriminatedUnion('type', [
-          z.object({ type: z.literal('SET'), n: z.number() }),
-        ]),
+        payloads: { SET: z.object({ n: z.number() }) },
         strict: true,
       },
     );
@@ -267,13 +262,13 @@ describe('12-B: defineActorWithSchema — Zod-typed machine', () => {
   });
 
   describe('dynamic input with injectActor', () => {
-    const machineWithInput = defineActorWithSchema(
-      createMachine({
+    const machineWithInput = createTypedMachine(
+      {
         id: 'withInput',
         context: ({ input }: { input: { userId: string } }) => ({ userId: input.userId }),
         initial: 'active',
         states: { active: {} },
-      }),
+      },
       { context: z.object({ userId: z.string() }) },
     );
 

@@ -1,4 +1,4 @@
-export { defineActorWithSchema } from './lib/define-actor-with-schema';
+export { createTypedMachine } from './lib/typed-machine';
 export { injectActor } from './lib/inject-actor';
 export { injectActorRef } from './lib/inject-actor-ref';
 export { injectSelector } from './lib/inject-selector';
@@ -12,3 +12,8 @@ export type {
   ActorContext,
   SendEvent,
 } from './lib/types';
+
+export type {
+  AllEventKeys,
+  TypedEventUnion,
+} from './lib/typed-machine-types';
