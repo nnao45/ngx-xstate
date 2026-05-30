@@ -1,16 +1,20 @@
 import { DestroyRef, inject } from '@angular/core';
-import { createActor, type Actor, type AnyActorLogic } from 'xstate';
+import { createActor, type Actor, type AnyActorLogic, type InspectionEvent } from 'xstate';
 import { getSchemas, type SchemasPayload } from './define-actor-with-schema';
+import { XSTATE_INSPECTOR } from './devtools';
 import type { InjectActorOptions } from './types';
 
 export function buildActorOptions<TLogic extends AnyActorLogic>(
   options: InjectActorOptions<TLogic> | undefined,
   input: unknown,
+  globalInspect?: (event: InspectionEvent) => void,
 ): Parameters<typeof createActor>[1] {
+  // Per-actor inspect takes precedence over global devtools inspector
+  const inspect = options?.inspect ?? globalInspect;
   return {
     id: options?.id,
     systemId: options?.systemId,
-    inspect: options?.inspect,
+    inspect,
     input: input as Parameters<typeof createActor>[1] extends { input?: infer I } ? I : never,
     snapshot: options?.snapshot as Parameters<typeof createActor>[1] extends { snapshot?: infer S } ? S : never,
   };
@@ -22,6 +26,8 @@ export function injectActorRef<TLogic extends AnyActorLogic>(
 ): Actor<TLogic> {
   const destroyRef = inject(DestroyRef);
   const schemas = getSchemas(logic);
+  // Pick up the global devtools inspector if registered via provideXstateDevtools()
+  const globalInspector = inject(XSTATE_INSPECTOR, { optional: true });
 
   const input = typeof options?.input === 'function'
     ? (options.input as () => unknown)()
@@ -29,7 +35,10 @@ export function injectActorRef<TLogic extends AnyActorLogic>(
 
   validateInput(input, schemas);
 
-  const actor = createActor(logic, buildActorOptions(options, input));
+  const actor = createActor(
+    logic,
+    buildActorOptions(options, input, globalInspector?.inspect.bind(globalInspector)),
+  );
   actor.start();
   destroyRef.onDestroy(() => { actor.stop(); });
 

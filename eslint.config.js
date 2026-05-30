@@ -27,4 +27,14 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Test files: inline callbacks, mock factories, and inspector stubs do not
+    // benefit from forced return-type annotations. Type-safety rules (no-explicit-any,
+    // no-unsafe-*, no-unused-vars) remain fully enforced.
+    files: ['**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+    },
+  },
 );

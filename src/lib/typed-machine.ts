@@ -10,7 +10,7 @@ import type {
 
 // ─── Runtime: collect all `on` keys recursively ──────────────────────────────
 
-function collectOnKeys(config: AnyStateConfig, keys: Set<string> = new Set()): Set<string> {
+function collectOnKeys(config: AnyStateConfig, keys = new Set<string>()): Set<string> {
   if (config.on != null) {
     Object.keys(config.on).forEach((k) => keys.add(k));
   }
@@ -36,15 +36,20 @@ function buildEventSchema(
     return (payload != null ? base.merge(payload) : base) as TypedEventSchema;
   });
 
-  if (schemas.length === 0) {
+  // Destructure + narrow so neither a non-null assertion nor an `as` cast
+  // is needed to satisfy the discriminatedUnion's "at least two members" tuple.
+  const [first, second, ...rest] = schemas;
+
+  if (first === undefined) {
+    // No `on` keys anywhere — fall back to an open event shape.
     return z.object({ type: z.string() });
   }
 
-  if (schemas.length === 1) {
-    return schemas[0] as TypedEventSchema;
+  if (second === undefined) {
+    return first;
   }
 
-  const duSchemas = schemas as unknown as [
+  const duSchemas = [first, second, ...rest] as unknown as [
     ZodDiscriminatedUnionOption<'type'>,
     ZodDiscriminatedUnionOption<'type'>,
     ...ZodDiscriminatedUnionOption<'type'>[],
@@ -66,6 +71,11 @@ export interface CreateTypedMachineOptions<
   readonly strict?: boolean;
 }
 
+// The return type is intentionally inferred, not annotated. An explicit
+// annotation would have to reproduce XState's full MachineSnapshot generic
+// (impractical) or collapse to AnyActorLogic — which makes SnapshotFrom<>
+// resolve to `any` and breaks snapshot/send typing. Inference preserves it.
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types
 export function createTypedMachine<
   TConfig extends AnyStateConfig & Parameters<typeof createMachine>[0],
   TPayloads extends Partial<Record<AllEventKeys<TConfig> & string, z.ZodObject<z.ZodRawShape>>> = Record<never, never>,

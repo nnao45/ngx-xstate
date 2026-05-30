@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
 import { createTypedMachine } from './typed-machine';
-import { injectActor, injectActorRef } from './inject-actor';
-import { injectActorRef as injectRef } from './inject-actor-ref';
+import { injectActor } from './inject-actor';
 
 function run<T>(fn: () => T): T {
   let result!: T;
