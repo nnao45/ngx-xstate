@@ -1,7 +1,6 @@
-import { createMachine, type AnyActorLogic } from 'xstate';
+import { createMachine } from 'xstate';
 import { z, type ZodDiscriminatedUnionOption } from 'zod';
-import { defineActorWithSchema, SCHEMAS_KEY } from './define-actor-with-schema';
-import type { SchematizedActor } from './types';
+import { defineActorWithSchema } from './define-actor-with-schema';
 import type {
   AnyStateConfig,
   AllEventKeys,
@@ -68,20 +67,17 @@ export interface CreateTypedMachineOptions<
 }
 
 export function createTypedMachine<
-  TConfig extends AnyStateConfig,
+  TConfig extends AnyStateConfig & Parameters<typeof createMachine>[0],
   TPayloads extends Partial<Record<AllEventKeys<TConfig> & string, z.ZodObject<z.ZodRawShape>>> = Record<never, never>,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
 >(
   config: TConfig,
   options?: CreateTypedMachineOptions<TPayloads, TContextSchema, TInputSchema>,
-): SchematizedActor<
-  AnyActorLogic,
-  TContextSchema,
-  z.ZodType<TypedEventUnion<AllEventKeys<TConfig> & string, TPayloads>>,
-  TInputSchema
-> {
-  const machine = createMachine(config as Parameters<typeof createMachine>[0]);
+) {
+  // createMachine receives TConfig directly — TypeScript infers the full machine type
+  // (context, events, states) without any 'as' cast losing information
+  const machine = createMachine(config);
 
   const onKeys = collectOnKeys(config);
   const payloads = (options?.payloads ?? {}) as Partial<Record<string, z.ZodObject<z.ZodRawShape>>>;
@@ -89,15 +85,12 @@ export function createTypedMachine<
     TypedEventUnion<AllEventKeys<TConfig> & string, TPayloads>
   >;
 
-  return defineActorWithSchema(machine as AnyActorLogic, {
+  // Return type is inferred from defineActorWithSchema — preserves typeof machine
+  // so SnapshotFrom<ReturnType<createTypedMachine>> is fully typed (not any)
+  return defineActorWithSchema(machine, {
     events: eventSchema,
     context: options?.context,
     input: options?.input,
     strict: options?.strict ?? false,
-  }) as SchematizedActor<
-    AnyActorLogic,
-    TContextSchema,
-    z.ZodType<TypedEventUnion<AllEventKeys<TConfig> & string, TPayloads>>,
-    TInputSchema
-  >;
+  });
 }
