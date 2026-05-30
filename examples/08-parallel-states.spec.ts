@@ -2,33 +2,31 @@
  * 08: Parallel States — 並列状態領域
  *
  * type: 'parallel' で複数の状態領域が同時に動く。
- * 互いに独立したフラグを管理するのに最適。
- *
- * 典型例: メディアプレイヤー (再生状態 × ミュート状態 × 全画面状態)
  * statecharts.dev の「並列状態」概念に直接対応。
+ *
+ * createTypedMachine: PLAY / PAUSE / MUTE / UNMUTE / ENTER_FULLSCREEN / EXIT_FULLSCREEN
+ * を on キーから全領域横断で自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createMachine } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
-const mediaPlayerMachine = createMachine({
+const mediaPlayerMachine = createTypedMachine({
   id: 'mediaPlayer',
-  // type: 'parallel' で全ての子状態が同時にアクティブ
   type: 'parallel',
   states: {
     playback: {
       initial: 'paused',
       states: {
-        paused: { on: { PLAY: 'playing' } },
-        playing: { on: { PAUSE: 'paused' } },
+        paused:  { on: { PLAY:  'playing' } },
+        playing: { on: { PAUSE: 'paused'  } },
       },
     },
     volume: {
       initial: 'unmuted',
       states: {
-        unmuted: { on: { MUTE: 'muted' } },
+        unmuted: { on: { MUTE:   'muted'   } },
         muted:   { on: { UNMUTE: 'unmuted' } },
       },
     },
@@ -36,7 +34,7 @@ const mediaPlayerMachine = createMachine({
       initial: 'windowed',
       states: {
         windowed:   { on: { ENTER_FULLSCREEN: 'fullscreen' } },
-        fullscreen: { on: { EXIT_FULLSCREEN:  'windowed' } },
+        fullscreen: { on: { EXIT_FULLSCREEN:  'windowed'   } },
       },
     },
   },
@@ -50,7 +48,6 @@ describe('08: Parallel States — Media player', () => {
   it('starts with all regions in initial state', () => {
     const { snapshot } = TestBed.runInInjectionContext(() => injectActor(mediaPlayerMachine));
 
-    // 並列状態の値はオブジェクト — 全領域の状態が同時に見える
     expect(snapshot().value).toEqual({
       playback:   'paused',
       volume:     'unmuted',
@@ -97,9 +94,8 @@ describe('08: Parallel States — Media player', () => {
     send({ type: 'PLAY' });
     send({ type: 'MUTE' });
 
-    // 個別領域のマッチ
-    expect(snapshot().matches({ playback: 'playing' })).toBe(true);
-    expect(snapshot().matches({ volume:   'muted'   })).toBe(true);
+    expect(snapshot().matches({ playback: 'playing'  })).toBe(true);
+    expect(snapshot().matches({ volume:   'muted'    })).toBe(true);
     expect(snapshot().matches({ fullscreen: 'windowed' })).toBe(true);
   });
 

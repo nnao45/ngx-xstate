@@ -6,14 +6,14 @@
  * - exit action:  状態から出るときに実行
  * - transition action: 遷移中に実行
  *
- * XState v5 では setup() で名前付き action を定義し、
- * machine 定義で参照する。
+ * XState v5 ではインライン関数として entry / exit / actions を直接書ける。
+ * createTypedMachine で on キーを自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { assign, createMachine, setup } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { assign } from 'xstate';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
 describe('05: Actions', () => {
   beforeEach(() => {
@@ -21,7 +21,7 @@ describe('05: Actions', () => {
   });
 
   describe('transition actions — assign でコンテキスト更新', () => {
-    const machine = createMachine({
+    const machine = createTypedMachine({
       id: 'withTransitionAction',
       context: { count: 0, lastEvent: '' },
       on: {
@@ -44,26 +44,20 @@ describe('05: Actions', () => {
     });
   });
 
-  describe('entry / exit actions', () => {
+  describe('entry / exit actions — インライン関数で直接定義', () => {
     const log: string[] = [];
 
-    const machine = setup({
-      actions: {
-        onEnterActive: () => { log.push('entered active'); },
-        onExitActive:  () => { log.push('exited active'); },
-        onEnterIdle:   () => { log.push('entered idle'); },
-      },
-    }).createMachine({
+    const machine = createTypedMachine({
       id: 'withEntryExit',
       initial: 'idle',
       states: {
         idle: {
-          entry: 'onEnterIdle',
+          entry: () => { log.push('entered idle'); },
           on: { START: 'active' },
         },
         active: {
-          entry: 'onEnterActive',
-          exit:  'onExitActive',
+          entry: () => { log.push('entered active'); },
+          exit:  () => { log.push('exited active'); },
           on: { STOP: 'idle' },
         },
       },
@@ -97,7 +91,7 @@ describe('05: Actions', () => {
   });
 
   describe('action with event payload', () => {
-    const machine = createMachine({
+    const machine = createTypedMachine({
       id: 'withPayload',
       context: { message: '' },
       on: {
@@ -112,7 +106,7 @@ describe('05: Actions', () => {
     it('assigns event payload to context', () => {
       const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(machine));
 
-      send({ type: 'NOTIFY', text: 'Hello World' });
+      send({ type: 'NOTIFY', text: 'Hello World' } as never);
 
       expect(snapshot().context.message).toBe('Hello World');
     });
@@ -121,11 +115,7 @@ describe('05: Actions', () => {
   describe('multiple actions on one transition', () => {
     const sideEffect = vi.fn();
 
-    const machine = setup({
-      actions: {
-        logAction: () => { sideEffect('logged'); },
-      },
-    }).createMachine({
+    const machine = createTypedMachine({
       id: 'multiAction',
       context: { count: 0 },
       on: {
@@ -133,7 +123,7 @@ describe('05: Actions', () => {
           // 複数 action を配列で指定 — 順番通りに実行される
           actions: [
             assign({ count: ({ context }) => context.count + 1 }),
-            'logAction',
+            () => { sideEffect('logged'); },
           ],
         },
       },

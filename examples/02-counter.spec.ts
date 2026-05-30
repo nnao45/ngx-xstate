@@ -4,14 +4,16 @@
  * 状態の「値」だけでなく「データ」を持つ。
  * XState では context に任意のデータを格納できる。
  * injectSelector で必要な値だけを Signal として取り出せる。
+ *
+ * createTypedMachine: INCREMENT / DECREMENT / RESET を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { assign, createMachine } from 'xstate';
-import { injectActor, injectActorRef, injectSelector } from '../src/public-api';
+import { assign } from 'xstate';
+import { createTypedMachine, injectActor, injectActorRef, injectSelector } from '../src/public-api';
 
-const counterMachine = createMachine({
+const counterMachine = createTypedMachine({
   id: 'counter',
   context: { count: 0 },
   on: {

@@ -4,46 +4,33 @@
  * after() で一定時間後に自動で状態遷移させられる。
  * タイムアウト、自動ログアウト、トースト通知の非表示など。
  *
+ * createTypedMachine: SHOW / DISMISS / LOGIN / ACTIVITY を自動推論。
  * テストでは vi.useFakeTimers() でタイマーを制御する。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMachine } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
-// トースト通知: 表示後 3秒で自動的に消える
-const toastMachine = createMachine({
+const toastMachine = createTypedMachine({
   id: 'toast',
   initial: 'hidden',
   states: {
-    hidden: {
-      on: { SHOW: 'visible' },
-    },
+    hidden:  { on: { SHOW: 'visible' } },
     visible: {
-      // 3000ms 後に自動で hidden へ
-      after: {
-        3000: 'hidden',
-      },
-      on: {
-        // 手動で閉じることもできる
-        DISMISS: 'hidden',
-      },
+      after: { 3000: 'hidden' },
+      on:    { DISMISS: 'hidden' },
     },
   },
 });
 
-// セッションタイムアウト: 5秒操作なしで expired
-const sessionMachine = createMachine({
+const sessionMachine = createTypedMachine({
   id: 'session',
   initial: 'active',
   states: {
     active: {
       after: { 5000: 'expired' },
-      on: {
-        // イベントが来たら active に留まる (自タイマーリセット)
-        ACTIVITY: 'active',
-      },
+      on:    { ACTIVITY: 'active' },
     },
     expired: {
       on: { LOGIN: 'active' },
@@ -117,7 +104,6 @@ describe('10: Delayed Transitions', () => {
         injectActor(sessionMachine),
       );
 
-      // 2秒経過 (5秒タイムアウトの途中)
       vi.advanceTimersByTime(2000);
       expect(snapshot().value).toBe('active');
 

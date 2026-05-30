@@ -2,21 +2,16 @@
  * 09: History States — 前の状態への復帰
  *
  * history state は「最後にいた状態」を記憶する特殊な状態。
- * 割り込み (ダイアログ表示、通話着信など) から戻るときに
- * 元の状態に自動で復帰できる。
+ * 割り込みから戻るときに元の状態に自動で復帰できる。
  *
- * type: 'history' で shallow history
- * type: 'history', history: 'deep' で deep history
+ * createTypedMachine: NEXT / BACK / OPEN_SETTINGS / CLOSE を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createMachine } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
-// ウィザード画面: step1 → step2 → step3
-// 途中で「設定画面」に移動し、戻ると元のステップに戻る
-const wizardMachine = createMachine({
+const wizardMachine = createTypedMachine({
   id: 'wizard',
   initial: 'wizard',
   states: {
@@ -26,8 +21,7 @@ const wizardMachine = createMachine({
         step1: { on: { NEXT: 'step2' } },
         step2: { on: { NEXT: 'step3', BACK: 'step1' } },
         step3: { on: { BACK: 'step2' } },
-        // history state: wizard 内の最後のステップを記憶する
-        hist: { type: 'history' },
+        hist:  { type: 'history' },
       },
       on: {
         OPEN_SETTINGS: 'settings',

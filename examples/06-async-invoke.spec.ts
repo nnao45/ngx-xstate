@@ -1,31 +1,29 @@
 /**
  * 06: Async Invoke — 非同期処理の状態管理
  *
- * XState では Promise/Observable を "invoke" することで
+ * XState では Promise を "invoke" することで
  * 非同期処理を状態機械として管理できる。
  * loading → success/error の典型的なフェッチパターン。
  *
  * fromPromise() で Promise を actor として扱う。
+ * createTypedMachine: FETCH / RESET / RETRY を on キーから自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { assign, createMachine, fromPromise } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { assign, fromPromise } from 'xstate';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
 interface User {
   id: number;
   name: string;
 }
 
-// Promise を返す actor logic を定義
 const fetchUserLogic = fromPromise<User, { userId: number }>(
-  ({ input }) =>
-    // テスト用: Promise.resolve でモックデータを返す
-    Promise.resolve({ id: input.userId, name: `User ${input.userId}` }),
+  ({ input }) => Promise.resolve({ id: input.userId, name: `User ${input.userId}` }),
 );
 
-const fetchMachine = createMachine({
+const fetchMachine = createTypedMachine({
   id: 'fetch',
   initial: 'idle',
   context: {
@@ -37,7 +35,6 @@ const fetchMachine = createMachine({
       on: { FETCH: 'loading' },
     },
     loading: {
-      // invoke で非同期処理を起動
       invoke: {
         src: fetchUserLogic,
         input: { userId: 1 },
@@ -55,7 +52,6 @@ const fetchMachine = createMachine({
       on: {
         RESET: {
           target: 'idle',
-          // RESET 時に context をクリアする
           actions: assign({ user: null, error: null }),
         },
       },
@@ -66,8 +62,7 @@ const fetchMachine = createMachine({
   },
 });
 
-// エラーケース用 machine
-const failingFetchMachine = createMachine({
+const failingFetchMachine = createTypedMachine({
   id: 'failingFetch',
   initial: 'loading',
   context: { error: null as string | null },
@@ -111,7 +106,6 @@ describe('06: Async Invoke', () => {
     const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(fetchMachine));
 
     send({ type: 'FETCH' });
-    // Promise の解決を待つ
     await Promise.resolve();
 
     expect(snapshot().value).toBe('success');
@@ -147,7 +141,6 @@ describe('06: Async Invoke', () => {
     expect(snapshot().value).toBe('error');
 
     send({ type: 'RETRY' });
-    // RETRY で loading に戻る
     expect(snapshot().value).toBe('loading');
   });
 });

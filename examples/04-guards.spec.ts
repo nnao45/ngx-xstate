@@ -2,46 +2,35 @@
  * 04: Guards — 条件付き遷移
  *
  * guard は遷移の「門番」。条件を満たす場合だけ遷移を許可する。
- * 同じイベントでも条件によって異なる遷移先に分岐できる。
- * statecharts.dev の「条件付き遷移」概念に対応。
+ * XState v5 ではインライン関数として guard を直接書ける。
+ *
+ * createTypedMachine: guard はインラインで定義し setup() は不要。
+ * on キーから INCREMENT / DECREMENT / LOGIN / LOGOUT を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { assign, createMachine, setup } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { assign } from 'xstate';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
-// 最大値/最小値のガード付きカウンター
-const boundedCounterMachine = setup({
-  guards: {
-    canIncrement: ({ context }: { context: { count: number } }) => context.count < 10,
-    canDecrement: ({ context }: { context: { count: number } }) => context.count > 0,
-  },
-}).createMachine({
+// 最大値/最小値のガード付きカウンター — インラインガード
+const boundedCounterMachine = createTypedMachine({
   id: 'boundedCounter',
   context: { count: 5 },
   on: {
     INCREMENT: {
-      guard: 'canIncrement',
+      guard: ({ context }: { context: { count: number } }) => context.count < 10,
       actions: assign({ count: ({ context }) => context.count + 1 }),
     },
     DECREMENT: {
-      guard: 'canDecrement',
+      guard: ({ context }: { context: { count: number } }) => context.count > 0,
       actions: assign({ count: ({ context }) => context.count - 1 }),
     },
   },
 });
 
 // ログイン状態によって遷移先が変わる machine
-const authMachine = setup({
-  types: {
-    context: {} as { isAdmin: boolean },
-    events: {} as { type: 'LOGIN' } | { type: 'LOGOUT' },
-  },
-  guards: {
-    isAdmin: ({ context }) => context.isAdmin,
-  },
-}).createMachine({
+const authMachine = createTypedMachine({
   id: 'auth',
   initial: 'loggedOut',
   context: { isAdmin: false },
@@ -52,7 +41,7 @@ const authMachine = setup({
     loggedIn: {
       initial: 'user',
       states: {
-        user: {},
+        user:  {},
         admin: {},
       },
       on: { LOGOUT: 'loggedOut' },
@@ -78,9 +67,8 @@ describe('04: Guards — conditional transitions', () => {
 
     it('blocks increment at maximum (10)', () => {
       const { snapshot, send } = TestBed.runInInjectionContext(() =>
-        injectActor(boundedCounterMachine, { input: undefined }),
+        injectActor(boundedCounterMachine),
       );
-      // 上限まで増やす
       for (let i = 0; i < 5; i++) send({ type: 'INCREMENT' });
 
       // ガードが弾くので 10 を超えない

@@ -2,53 +2,55 @@
  * 07: Compound States — 階層化された状態
  *
  * 状態の中に状態を持てる (nested states)。
- * 複雑なフローを「大きな状態」と「詳細な状態」に分けて管理できる。
  * 典型例: 認証フロー (loggedIn の中に idle/active がある)
  *
- * snapshot.matches() で階層状態のマッチができる。
+ * createTypedMachine: LOGIN はペイロード (username) があるので
+ * payloads に追加。LOGOUT / GO_IDLE / WAKE_UP は自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { assign, createMachine } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { assign } from 'xstate';
+import { z } from 'zod';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
-// 認証フロー: ログアウト / ログイン中(アクティブ/アイドル)
-const authMachine = createMachine({
-  id: 'auth',
-  initial: 'loggedOut',
-  context: { username: '' },
-  states: {
-    loggedOut: {
-      on: {
-        LOGIN: {
-          target: 'loggedIn',
-          actions: assign({
-            username: ({ event }: { event: { type: 'LOGIN'; username: string } }) => event.username,
-          }),
+const authMachine = createTypedMachine(
+  {
+    id: 'auth',
+    initial: 'loggedOut',
+    context: { username: '' },
+    states: {
+      loggedOut: {
+        on: {
+          LOGIN: {
+            target: 'loggedIn',
+            actions: assign({
+              username: ({ event }: { event: { type: 'LOGIN'; username: string } }) => event.username,
+            }),
+          },
         },
       },
-    },
-    // compound state: loggedIn は内部に子状態を持つ
-    loggedIn: {
-      initial: 'active',
-      states: {
-        active: {
-          on: { GO_IDLE: 'idle' },
+      loggedIn: {
+        initial: 'active',
+        states: {
+          active: { on: { GO_IDLE: 'idle' } },
+          idle:   { on: { WAKE_UP: 'active' } },
         },
-        idle: {
-          on: { WAKE_UP: 'active' },
-        },
-      },
-      on: {
-        LOGOUT: {
-          target: 'loggedOut',
-          actions: assign({ username: '' }),
+        on: {
+          LOGOUT: {
+            target: 'loggedOut',
+            actions: assign({ username: '' }),
+          },
         },
       },
     },
   },
-});
+  {
+    payloads: {
+      LOGIN: z.object({ username: z.string().min(1) }),
+    },
+  },
+);
 
 describe('07: Compound States — Authentication flow', () => {
   beforeEach(() => {
@@ -65,7 +67,6 @@ describe('07: Compound States — Authentication flow', () => {
 
     send({ type: 'LOGIN', username: 'alice' });
 
-    // compound state の値はオブジェクトになる
     expect(snapshot().value).toEqual({ loggedIn: 'active' });
     expect(snapshot().context.username).toBe('alice');
   });

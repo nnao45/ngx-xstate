@@ -1,41 +1,45 @@
 /**
  * 03: Context — 複雑なデータ管理
  *
- * context は単純なカウンターだけでなく、複数のフィールド、
- * オブジェクト、配列など任意のデータ構造を持てる。
+ * context は単純なカウンターだけでなく、複数のフィールドを持てる。
  * assign() で部分更新・計算更新が可能。
+ *
+ * createTypedMachine: SET_NAME / SET_EMAIL はペイロードがあるので
+ * payloads に Zod スキーマを追加。SUBMIT はペイロードなしで自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { assign, createMachine } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { assign } from 'xstate';
+import { z } from 'zod';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
-// フォームの入力値を状態として持つ machine
-const formMachine = createMachine({
-  id: 'form',
-  context: {
-    name: '',
-    email: '',
-    submitted: false,
-  },
-  initial: 'editing',
-  states: {
-    editing: {
-      on: {
-        SET_NAME:  { actions: assign({ name:  ({ event }: { event: { type: 'SET_NAME';  value: string } }) => event.value }) },
-        SET_EMAIL: { actions: assign({ email: ({ event }: { event: { type: 'SET_EMAIL'; value: string } }) => event.value }) },
-        SUBMIT: {
-          target: 'submitted',
-          actions: assign({ submitted: true }),
+const formMachine = createTypedMachine(
+  {
+    id: 'form',
+    context: { name: '', email: '', submitted: false },
+    initial: 'editing',
+    states: {
+      editing: {
+        on: {
+          SET_NAME:  { actions: assign({ name:  ({ event }: { event: { type: 'SET_NAME';  value: string } }) => event.value }) },
+          SET_EMAIL: { actions: assign({ email: ({ event }: { event: { type: 'SET_EMAIL'; value: string } }) => event.value }) },
+          SUBMIT: {
+            target: 'submitted',
+            actions: assign({ submitted: true }),
+          },
         },
       },
-    },
-    submitted: {
-      // 送信後は編集不可
+      submitted: {},
     },
   },
-});
+  {
+    payloads: {
+      SET_NAME:  z.object({ value: z.string() }),
+      SET_EMAIL: z.object({ value: z.string().email() }),
+    },
+  },
+);
 
 describe('03: Context — Form data management', () => {
   beforeEach(() => {

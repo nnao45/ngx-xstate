@@ -2,19 +2,18 @@
  * 11: Final States — 完了フロー
  *
  * type: 'final' の状態は「終了状態」。
- * actor が final state に達すると done になり、
- * 親の machine や invoke の onDone が呼ばれる。
+ * actor が final state に達すると done になる。
  *
- * 典型例: 支払いフロー、オンボーディング、ファイルアップロード
+ * createTypedMachine: PROCEED_TO_PAYMENT / PAY / CANCEL / FINISH /
+ * NEXT / BACK / COMPLETE を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { assign, createMachine, fromPromise } from 'xstate';
-import { injectActor } from '../src/public-api';
+import { assign, fromPromise } from 'xstate';
+import { createTypedMachine, injectActor } from '../src/public-api';
 
-// 支払いフロー: cart → payment → confirmation → done
-const checkoutMachine = createMachine({
+const checkoutMachine = createTypedMachine({
   id: 'checkout',
   initial: 'cart',
   context: { orderId: '' },
@@ -24,7 +23,7 @@ const checkoutMachine = createMachine({
     },
     payment: {
       on: {
-        PAY: 'processing',
+        PAY:    'processing',
         CANCEL: 'cart',
       },
     },
@@ -43,22 +42,18 @@ const checkoutMachine = createMachine({
     confirmation: {
       on: { FINISH: 'done' },
     },
-    // final state: checkout 完了
-    done: {
-      type: 'final',
-    },
+    done: { type: 'final' },
   },
 });
 
-// 3ステップのオンボーディング
-const onboardingMachine = createMachine({
+const onboardingMachine = createTypedMachine({
   id: 'onboarding',
   initial: 'welcome',
   states: {
-    welcome:  { on: { NEXT: 'profile' } },
-    profile:  { on: { NEXT: 'preferences', BACK: 'welcome' } },
+    welcome:     { on: { NEXT: 'profile' } },
+    profile:     { on: { NEXT: 'preferences', BACK: 'welcome' } },
     preferences: { on: { COMPLETE: 'finished' } },
-    finished: { type: 'final' },
+    finished:    { type: 'final' },
   },
 });
 
@@ -80,7 +75,6 @@ describe('11: Final States', () => {
 
       send({ type: 'PROCEED_TO_PAYMENT' });
       send({ type: 'PAY' });
-      // invoke の Promise → onDone アクションまで複数の microtask が必要
       await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
 
       expect(snapshot().value).toBe('confirmation');
@@ -123,9 +117,9 @@ describe('11: Final States', () => {
         injectActor(onboardingMachine),
       );
 
-      send({ type: 'NEXT' });     // welcome → profile
-      send({ type: 'NEXT' });     // profile → preferences
-      send({ type: 'COMPLETE' }); // preferences → finished
+      send({ type: 'NEXT' });
+      send({ type: 'NEXT' });
+      send({ type: 'COMPLETE' });
 
       expect(snapshot().value).toBe('finished');
       expect(snapshot().status).toBe('done');
