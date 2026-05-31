@@ -23,6 +23,8 @@ function run<T>(fn: () => T): T {
   return result;
 }
 
+type IsAny<T> = 0 extends 1 & T ? true : false;
+
 // =====================================================================
 // A) invoke で子 machine を起動し、final state の output を親が受け取る
 // =====================================================================
@@ -31,6 +33,7 @@ function run<T>(fn: () => T): T {
 const workerMachine = typedSetup({
   context: z.object({ jobId: z.string() }),
   input: z.object({ jobId: z.string() }),
+  output: z.object({ jobId: z.string() }),
   events: {},
 }).createMachine({
   id: 'worker',
@@ -59,14 +62,13 @@ const managerMachine = typedSetup({
         input: { jobId: 'job-42' },
         onDone: {
           target: 'finished',
-          // NOTE: 子「ステートマシン」を invoke して event.output を読むケースは
-          // XState v5 の型推論の限界で any に落ちることがある（fromPromise actor は
-          // 型付く）。ここでは output の形を明示キャストして取り出す。
           actions: assign({
-            completed: ({ context, event }) => [
-              ...context.completed,
-              (event.output as { jobId: string }).jobId,
-            ],
+            completed: ({ context, event }) => {
+              const outputIsAny: false = true as IsAny<typeof event.output>;
+              void outputIsAny;
+
+              return [...context.completed, event.output.jobId];
+            },
           }),
         },
       },

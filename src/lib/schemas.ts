@@ -7,6 +7,7 @@ export type SchemasPayload = {
   readonly context: z.ZodTypeAny | undefined;
   readonly events: z.ZodTypeAny | undefined;
   readonly input: z.ZodTypeAny | undefined;
+  readonly output: z.ZodTypeAny;
   readonly strict: boolean;
 };
 

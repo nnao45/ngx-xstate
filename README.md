@@ -96,7 +96,8 @@ const form = typedSetup({
 | `events` | `{ KEY: ZodObject }` | Event name → payload schema. Use `noPayload` for events without a payload. Empty `{}` falls back to `{ type: string }`. |
 | `context?` | `ZodTypeAny` | Schema for `context`; types the machine's context. |
 | `input?` | `ZodTypeAny` | Schema for actor `input`. |
-| `actors?` | `Record<string, ActorLogic>` | Logic registered for `invoke`/`spawn`. Reference by name in `invoke.src` (inline logic is not allowed, per `setup`). `onDone.event.output` is typed. |
+| `output?` | `ZodTypeAny` | Schema for actor `output`; types `onDone.event.output` when this machine is invoked as a child. Defaults to `z.unknown()`. |
+| `actors?` | `Record<string, ActorLogic>` | Logic registered for `invoke`/`spawn`. Reference by name in `invoke.src` (inline logic is not allowed, per `setup`). |
 | `strict?` | `boolean` | `true` → throw on validation failure. Default `false` → warn + no-op (matches XState's behavior for unknown events). |
 
 > **Note:** let the return type be inferred. Adding an explicit type annotation collapses it to `any`.

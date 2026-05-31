@@ -41,6 +41,7 @@ type TypedMachineDef<...> = {
   events: TEvents;            // イベント名 → ペイロード Zod（payload なしは noPayload）
   context?: TContextSchema;   // context の Zod スキーマ
   input?: TInputSchema;       // input の Zod スキーマ
+  output?: TOutputSchema;     // output の Zod スキーマ
   actors?: TActors;           // invoke/spawn 用 actor logic（src で名前参照）
   actions?: {...};            // 名前付き action（XState v5 の params 型を保持）
   guards?: {...};             // 名前付き guard（params 型を保持）
@@ -76,13 +77,12 @@ typedSetup({
 });
 ```
 
-### 既知の型の限界
+### output
 
-子「ステートマシン」を `invoke` して `onDone.event.output` を読むケースは、
-`actions`/`guards` 対応で `actors` を `setup` の正確なパラメータ型へキャストする都合上、
-`event.output` が `any` に落ちることがある（XState v5 の型の交差領域の限界。`fromPromise`
-の actor では型付く）。回避策: actor を `fromPromise` にするか、`event.output` をキャスト
-して取り出す。
+子ステートマシンを `invoke` して `onDone.event.output` を読む場合は、子 machine 側の
+`typedSetup` に `output` スキーマを渡す。これは XState の `setup({ types: { output } })`
+と同じ役割で、親 machine の `event.output` にその型が伝播する。未指定時は
+`z.unknown()` として扱う。
 
 ---
 

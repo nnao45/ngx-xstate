@@ -139,7 +139,13 @@ describe('validateAndSend', () => {
 
   it('no-ops on invalid event when strict=false', () => {
     const actor = runInInjectionContext(() => injectActorRef(counterMachine));
-    const schemas = { events: eventSchema, context: undefined, input: undefined, strict: false };
+    const schemas = {
+      events: eventSchema,
+      context: undefined,
+      input: undefined,
+      output: z.unknown(),
+      strict: false,
+    };
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     validateAndSend(actor, { type: 'UNKNOWN' }, schemas);
@@ -151,7 +157,13 @@ describe('validateAndSend', () => {
 
   it('throws on invalid event when strict=true', () => {
     const actor = runInInjectionContext(() => injectActorRef(counterMachine));
-    const schemas = { events: eventSchema, context: undefined, input: undefined, strict: true };
+    const schemas = {
+      events: eventSchema,
+      context: undefined,
+      input: undefined,
+      output: z.unknown(),
+      strict: true,
+    };
 
     expect(() => {
       validateAndSend(actor, { type: 'UNKNOWN' }, schemas);

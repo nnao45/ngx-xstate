@@ -86,6 +86,7 @@ export type TypedMachineDef<
   TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny,
   TInputSchema extends z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny,
   TActors extends Record<string, UnknownActorLogic>,
   TActions extends ParamsMap,
   TGuards extends ParamsMap,
@@ -96,6 +97,8 @@ export type TypedMachineDef<
   readonly context?: TContextSchema;
   /** input の Zod スキーマ */
   readonly input?: TInputSchema;
+  /** output の Zod スキーマ。final state の output を invoke 側で型付けする */
+  readonly output?: TOutputSchema;
   /** invoke / spawn で使う actor logic。invoke.src に名前で参照する */
   readonly actors?: TActors;
   /**
@@ -161,18 +164,35 @@ export function typedSetup<
   TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
+  TOutputSchema extends z.ZodTypeAny = z.ZodUnknown,
   TActors extends Record<string, UnknownActorLogic> = Record<never, never>,
   TActions extends ParamsMap = Record<never, never>,
   TGuards extends ParamsMap = Record<never, never>,
->(def: TypedMachineDef<TEvents, TContextSchema, TInputSchema, TActors, TActions, TGuards>) {
-  const s = setup({
+>(
+  def: TypedMachineDef<
+    TEvents,
+    TContextSchema,
+    TInputSchema,
+    TOutputSchema,
+    TActors,
+    TActions,
+    TGuards
+  >,
+) {
+  const outputSchema = def.output ?? z.unknown();
+
+  const base = setup({
     types: {} as {
       context: ResolvedContext<TContextSchema>;
       events: EventUnionFromMap<TEvents>;
       input: z.infer<TInputSchema>;
+      output: z.infer<TOutputSchema>;
     },
     // setup の actors パラメータ型に合わせた境界キャスト
     actors: def.actors as { [K in keyof TActors]: K extends keyof TActors ? TActors[K] : never },
+  });
+
+  const s = base.extend({
     actions: def.actions,
     guards: def.guards,
   });
@@ -181,6 +201,7 @@ export function typedSetup<
     context: def.context,
     events: buildEventSchema(def.events),
     input: def.input,
+    output: outputSchema,
     strict: def.strict ?? false,
   };
 
