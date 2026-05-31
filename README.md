@@ -272,7 +272,9 @@ actor
 
 `within` only accepts **compound** state names (passing a leaf is a compile error). A compound parent's own events are handled with `.in(name, cb)` — `.in('loggedIn', p => p.send({ type: 'LOGOUT' }))` matches whenever any `loggedIn` substate is active. A `within` block's `otherwise` fires only when the parent is active but no child matched; matching the parent suppresses the outer `otherwise`.
 
-`.in()` / `.within()` read the current snapshot once (imperative — ideal for event handlers). For actors obtained via `injectActorRef` or `createActorContext`, use the standalone `matchActor(actorRef)`. Only machines built with `typedSetup` carry the per-state typing; a plain `createMachine` machine degrades the state names to `never`.
+`.in()` / `.within()` read the current snapshot once (imperative — ideal for event handlers). For actors obtained via `injectActorRef` or `createActorContext`, use the standalone `matchActor(actorRef)`.
+
+**Plain `setup()` machines work too.** A machine built with `typedSetup` carries a state-tree brand that types `send` to the events valid **in each state**. A plain XState `setup().createMachine()` machine has no brand, so `matchActor` falls back to deriving the state-name tree from the machine's own schema (`StateSchemaFrom`) — `.in()` / `.within()` still match real state names with full type safety (unknown names and `.within()` on a leaf are compile errors), and only `scope.send` widens to the machine's full event union (per-state narrowing needs the brand, since XState erases per-state transitions from the machine type).
 
 ---
 
