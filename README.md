@@ -35,6 +35,8 @@ class CounterComponent {
 - **Zod-typed events & context** — declare schemas once; `assign` events are auto-narrowed per transition, and `send()` payloads are fully type-checked.
 - **Runtime validation** — events/context/input are validated against your Zod schemas at runtime (no-op by default, `strict: true` to throw).
 - **Automatic lifecycle** — actors start on inject and stop on component destroy via `DestroyRef`. Zero boilerplate.
+- **State-scoped, type-safe dispatch** — `actor.in('idle').tap(idle => idle.send(...))` is a monadic `case/when` where `send` only accepts the events valid **in that state** (sending an event the state can't handle is a compile error).
+- **Named actions / guards** — declared with full XState v5 `params` types preserved.
 - **Stately Visualizer devtools** — one provider connects every machine in the app.
 - **State tree logging** — render machine structure or a running actor's active states as a plain text tree.
 
@@ -99,7 +101,30 @@ const form = typedSetup({
 | `input?` | `ZodTypeAny` | Schema for actor `input`. |
 | `output?` | `ZodTypeAny` | Schema for actor `output`; types `onDone.event.output` when this machine is invoked as a child. Defaults to `z.unknown()`. |
 | `actors?` | `Record<string, ActorLogic>` | Logic registered for `invoke`/`spawn`. Reference by name in `invoke.src` (inline logic is not allowed, per `setup`). |
+| `actions?` | `Record<string, ActionFn>` | Named actions. The XState v5 `params` type is preserved — reference as `{ type: 'name', params }` or `'name'` in the config. |
+| `guards?` | `Record<string, GuardFn>` | Named guards. `params` type preserved, same as actions. |
 | `strict?` | `boolean` | `true` → throw on validation failure. Default `false` → warn + no-op (matches XState's behavior for unknown events). |
+
+#### Named actions / guards (params preserved)
+
+```ts
+const counter = typedSetup({
+  context: z.object({ count: z.number() }),
+  events: { STEP: z.object({ by: z.number() }) },
+  actions: {
+    bump: assign({ count: ({ context }, p: { amount: number }) => context.count + p.amount }),
+  },
+  guards: { underMax: ({ context }, p: { max: number }) => context.count < p.max },
+}).createMachine({
+  context: { count: 0 },
+  on: {
+    STEP: {
+      guard: { type: 'underMax', params: { max: 10 } }, // params type-checked
+      actions: { type: 'bump', params: { amount: 1 } }, // params type-checked
+    },
+  },
+});
+```
 
 > **Note:** let the return type be inferred. Adding an explicit type annotation collapses it to `any`.
 
@@ -112,7 +137,7 @@ const form = typedSetup({
 Creates, starts, and auto-disposes an actor. Returns reactive accessors.
 
 ```ts
-const { snapshot, send, actorRef } = injectActor(machine, options?);
+const { snapshot, send, actorRef, in: $in } = injectActor(machine, options?);
 ```
 
 | Returns | Type | |
@@ -120,6 +145,7 @@ const { snapshot, send, actorRef } = injectActor(machine, options?);
 | `snapshot` | `Signal<SnapshotFrom<T>>` | Updated on every transition. |
 | `send` | `(event) => void` | Type-checked against the machine's events. |
 | `actorRef` | `Actor<T>` | The underlying XState actor. |
+| `in` | `(stateName) => Branch` | State-scoped `case/when` matcher (see below). |
 
 **Options:** `input` (static value **or** a function for Signal-connected dynamic input), `inspect`, `snapshot` (restore).
 
@@ -209,6 +235,37 @@ checkout ●
 └─ done  (final)
 ```
 
+### `actor.in(stateName)` / `matchActor(actorRef)`
+
+A monadic, state-scoped `case/when`. Each branch runs only when the actor is currently in that state, and its `send` is narrowed to the events **valid in that state** — sending anything else is a compile error.
+
+```ts
+const actor = injectActor(fetchMachine);
+
+actor
+  .in('idle').tap(idle => {
+    idle.send({ type: 'FETCH' });   // ✅ valid in 'idle'
+    idle.send({ type: 'RESOLVE' }); // ❌ compile error — 'idle' has no RESOLVE transition
+  })
+  .in('loading').tap(loading => loading.send({ type: 'CANCEL' }))
+  .otherwise(() => {/* in neither state */});
+```
+
+| Method | On | Returns | Meaning |
+|---|---|---|---|
+| `.in(name)` | Matcher | `Branch` | Select a state at this level. |
+| `.tap(cb)` | Branch | `Matcher` (parent level) | Run `cb` if matched; chain a sibling = `case/when`. |
+| `.in(child)` | Branch | `Branch` | Descend into a nested state. |
+| `.otherwise(cb)` | Matcher | `void` | `default` clause — runs if no branch matched. |
+
+The `scope` passed to `.tap` is `{ send (narrowed), context (readonly), value }`. Nesting uses `.in().in()`:
+
+```ts
+actor.in('loggedIn').in('active').tap(active => active.send({ type: 'GO_IDLE' }));
+```
+
+`.in()` reads the current snapshot once (imperative — ideal for event handlers). For actors obtained via `injectActorRef` or `createActorContext`, use the standalone `matchActor(actorRef)`. Only machines built with `typedSetup` carry the per-state typing; a plain `createMachine` machine degrades the state names to `never`.
+
 ---
 
 ## Runtime validation
@@ -272,7 +329,7 @@ npm run build        # ng-packagr
 
 Tooling: **vitest** (jsdom, coverage v8), **oxlint** (type-aware) + **oxfmt** for lint/format.
 
-See [`examples/`](./examples) for 17 runnable spec files covering toggle, counter, context, guards, actions, async invoke, compound/parallel/history/final states, delayed transitions, devtools, state tree logging, named actions/guards, and Zod validation. Design docs live in [`specs/`](./specs).
+See [`examples/`](./examples) for 18 runnable spec files covering toggle, counter, context, guards, actions, async invoke, compound/parallel/history/final states, delayed transitions, complex multi-machine coordination, devtools, state tree logging, named actions/guards, Zod validation, and state-scoped matching. Design docs live in [`specs/`](./specs).
 
 ---
 
