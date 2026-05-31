@@ -329,7 +329,7 @@ npm run build        # ng-packagr
 
 Tooling: **vitest** (jsdom, coverage v8), **oxlint** (type-aware) + **oxfmt** for lint/format.
 
-See [`examples/`](./examples) for 18 runnable spec files covering toggle, counter, context, guards, actions, async invoke, compound/parallel/history/final states, delayed transitions, complex multi-machine coordination, devtools, state tree logging, named actions/guards, Zod validation, and state-scoped matching. Design docs live in [`specs/`](./specs).
+See [`examples/`](./examples) for 20 runnable spec files covering toggle, counter, context, guards, actions, async invoke, compound/parallel/history/final states, delayed transitions, complex multi-machine coordination, devtools, state tree logging, named actions/guards, Zod validation, state-scoped matching, and two cross-feature **E2E** suites (`19-e2e-order-flow`, `20-e2e-realtime`) that exercise the whole library through real Angular components. Design docs live in [`specs/`](./specs).
 
 ---
 
