@@ -12,7 +12,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { typedSetup, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor, renderStateTree } from '../src/public-api';
 
 const authMachine = typedSetup({
   context: z.object({ username: z.string() }),
@@ -80,12 +80,15 @@ describe('07: Compound States — Authentication flow', () => {
   });
 
   it('navigates child states within loggedIn', () => {
-    const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(authMachine));
+    const { actorRef, snapshot, send } = TestBed.runInInjectionContext(() =>
+      injectActor(authMachine),
+    );
 
     send({ type: 'LOGIN', username: 'alice' });
     send({ type: 'GO_IDLE' });
 
     expect(snapshot().value).toEqual({ loggedIn: 'idle' });
+    expect(renderStateTree(actorRef)).toContain('   └─ idle ●');
   });
 
   it('logs out from any child state', () => {

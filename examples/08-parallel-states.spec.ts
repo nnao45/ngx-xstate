@@ -10,7 +10,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { typedSetup, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor, renderStateTree } from '../src/public-api';
 
 const mediaPlayerMachine = typedSetup({
   events: {
@@ -78,7 +78,9 @@ describe('08: Parallel States — Media player', () => {
   });
 
   it('each region is fully independent', () => {
-    const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(mediaPlayerMachine));
+    const { actorRef, snapshot, send } = TestBed.runInInjectionContext(() =>
+      injectActor(mediaPlayerMachine),
+    );
 
     send({ type: 'PLAY' });
     send({ type: 'MUTE' });
@@ -89,6 +91,12 @@ describe('08: Parallel States — Media player', () => {
       volume: 'muted',
       fullscreen: 'fullscreen',
     });
+
+    const tree = renderStateTree(actorRef);
+    expect(tree).toContain('mediaPlayer ●  (parallel)');
+    expect(tree).toContain('│  └─ playing ●');
+    expect(tree).toContain('│  └─ muted ●');
+    expect(tree).toContain('   └─ fullscreen ●');
   });
 
   it('can query individual region with matches()', () => {

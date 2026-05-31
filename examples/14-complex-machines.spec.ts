@@ -13,7 +13,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign, stopChild, type ActorRefFrom, type AnyActorRef } from 'xstate';
 import { z } from 'zod';
-import { typedSetup, injectActor, noPayload } from '../src/public-api';
+import { typedSetup, injectActor, noPayload, renderStateTree } from '../src/public-api';
 
 function run<T>(fn: () => T): T {
   let result!: T;
@@ -235,10 +235,15 @@ describe('14: Complex multi-machine coordination', () => {
     });
 
     it('starts with both regions in initial state', () => {
-      const { snapshot } = run(() => injectActor(trafficSystemMachine));
+      const { actorRef, snapshot } = run(() => injectActor(trafficSystemMachine));
       expect(snapshot().value).toEqual({
         on: { vehicle: 'green', pedestrian: 'dontWalk' },
       });
+
+      const tree = renderStateTree(actorRef);
+      expect(tree).toContain('trafficSystem ●');
+      expect(tree).toContain('│  ├─ green ●  (initial)');
+      expect(tree).toContain('│     ├─ dontWalk ●  (initial)');
     });
 
     it('vehicle region advances independently via delayed transitions', () => {
@@ -264,7 +269,7 @@ describe('14: Complex multi-machine coordination', () => {
     });
 
     it('history restores pedestrian sub-state after power cycle', () => {
-      const { snapshot, send } = run(() => injectActor(trafficSystemMachine));
+      const { actorRef, snapshot, send } = run(() => injectActor(trafficSystemMachine));
 
       send({ type: 'PED_BUTTON' }); // pedestrian → walk
       expect(snapshot().matches({ on: { pedestrian: 'walk' } })).toBe(true);
@@ -274,6 +279,7 @@ describe('14: Complex multi-machine coordination', () => {
 
       send({ type: 'POWER_ON' }); // history で walk に復帰
       expect(snapshot().matches({ on: { pedestrian: 'walk' } })).toBe(true);
+      expect(renderStateTree(actorRef)).toContain('│     ├─ walk ●');
     });
   });
 });
