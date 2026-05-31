@@ -30,10 +30,10 @@ function typedSetup<
   TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
-  TActors extends Record<string, AnyActorLogic> = Record<never, never>,
->(def: TypedMachineDef<TEvents, TContextSchema, TInputSchema, TActors>): {
-  create: SetupInstance['createMachine'];
-};
+  TActors extends Record<string, UnknownActorLogic> = Record<never, never>,
+  TActions extends ParamsMap = Record<never, never>,
+  TGuards extends ParamsMap = Record<never, never>,
+>(def: TypedMachineDef<...>): { createMachine: SetupInstance['createMachine'] };
 
 type EventsMap = Record<string, z.ZodObject<z.ZodRawShape>>;
 
@@ -41,13 +41,48 @@ type TypedMachineDef<...> = {
   events: TEvents;            // イベント名 → ペイロード Zod（payload なしは noPayload）
   context?: TContextSchema;   // context の Zod スキーマ
   input?: TInputSchema;       // input の Zod スキーマ
-  actors?: TActors;           // invoke/spawn 用 actor logic
+  actors?: TActors;           // invoke/spawn 用 actor logic（src で名前参照）
+  actions?: {...};            // 名前付き action（XState v5 の params 型を保持）
+  guards?: {...};             // 名前付き guard（params 型を保持）
   strict?: boolean;           // true で throw（デフォルト false = warn + no-op）
 };
 ```
 
-戻り値は `{ create }`。`create` は setup インスタンスの `createMachine` そのもの
-（完全な型推論を保持）。
+戻り値は `{ createMachine }`。setup インスタンスの `createMachine` そのもの（型推論を保持）。
+
+### actions / guards（params 型の透過）
+
+XState v5 の `setup({ actions, guards })` と同様、名前付き action / guard を宣言できる。
+**第2引数 `params` の型を壊さず透過**するため、`setup` 内部の `ToProvidedActor` /
+`ToParameterizedObject` ヘルパーを verbatim 再現し、`ActionFunction` / `GuardPredicate`
+のスロット型を `setup` と型同一にしている（ズレると `_out_TActor` ファントム型で代入不能）。
+
+```typescript
+typedSetup({
+  context: z.object({ count: z.number() }),
+  events: { STEP: z.object({ by: z.number() }) },
+  actions: {
+    bump: assign({ count: ({ context }, p: { amount: number }) => context.count + p.amount }),
+  },
+  guards: { underMax: ({ context }, p: { max: number }) => context.count < p.max },
+}).createMachine({
+  context: { count: 0 },
+  on: {
+    STEP: {
+      guard: { type: 'underMax', params: { max: 10 } }, // params 型付き
+      actions: { type: 'bump', params: { amount: 1 } }, // params 型付き
+    },
+  },
+});
+```
+
+### 既知の型の限界
+
+子「ステートマシン」を `invoke` して `onDone.event.output` を読むケースは、
+`actions`/`guards` 対応で `actors` を `setup` の正確なパラメータ型へキャストする都合上、
+`event.output` が `any` に落ちることがある（XState v5 の型の交差領域の限界。`fromPromise`
+の actor では型付く）。回避策: actor を `fromPromise` にするか、`event.output` をキャスト
+して取り出す。
 
 ---
 

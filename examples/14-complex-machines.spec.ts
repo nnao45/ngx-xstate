@@ -59,9 +59,14 @@ const managerMachine = typedSetup({
         input: { jobId: 'job-42' },
         onDone: {
           target: 'finished',
-          // event.output は worker の output 型に型付けされる
+          // NOTE: 子「ステートマシン」を invoke して event.output を読むケースは
+          // XState v5 の型推論の限界で any に落ちることがある（fromPromise actor は
+          // 型付く）。ここでは output の形を明示キャストして取り出す。
           actions: assign({
-            completed: ({ context, event }) => [...context.completed, event.output.jobId],
+            completed: ({ context, event }) => [
+              ...context.completed,
+              (event.output as { jobId: string }).jobId,
+            ],
           }),
         },
       },

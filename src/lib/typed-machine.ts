@@ -1,4 +1,13 @@
-import { setup, type AnyActorLogic } from 'xstate';
+import {
+  setup,
+  type ActionFunction,
+  type EventObject,
+  type GuardPredicate,
+  type MachineContext,
+  type ParameterizedObject,
+  type UnknownActorLogic,
+  type Values,
+} from 'xstate';
 import { z, type ZodDiscriminatedUnionOption } from 'zod';
 import { attachSchemas, type SchemasPayload } from './schemas';
 import type { EventsMap, EventUnionFromMap } from './typed-machine-types';
@@ -39,15 +48,49 @@ function buildEventSchema(events: EventsMap): z.ZodTypeAny {
   return z.discriminatedUnion('type', duSchemas);
 }
 
+// ─── XState setup の内部ヘルパー型を verbatim 再現 ───────────────────────────────
+// （actions / guards の ActionFunction / GuardPredicate が要求する TActor / TAction /
+//  TGuard スロットの型を setup と「型同一」にするため。ズレると _out_TActor 等の
+//  ファントム型で代入不能になる。）
+
+type IsNever<T> = [T] extends [never] ? true : false;
+type Invert<T extends Record<PropertyKey, PropertyKey>> = { [K in keyof T as T[K]]: K };
+
+type ToParameterizedObject<TMap extends Record<string, ParameterizedObject['params'] | undefined>> =
+  Values<{ [K in keyof TMap as K & string]: { type: K & string; params: TMap[K] } }>;
+
+type ToProvidedActor<
+  TChildrenMap extends Record<string, string>,
+  TActors extends Record<string, UnknownActorLogic>,
+> = Values<{
+  [K in keyof TActors as K & string]: {
+    src: K & string;
+    logic: TActors[K];
+    id: IsNever<TChildrenMap> extends true
+      ? string | undefined
+      : K extends keyof Invert<TChildrenMap>
+        ? Invert<TChildrenMap>[K] & string
+        : string | undefined;
+  };
+}>;
+
+// context スキーマ未指定（z.infer = unknown）なら MachineContext にフォールバック
+type ResolvedContext<T extends z.ZodTypeAny> =
+  z.infer<T> extends MachineContext ? z.infer<T> : MachineContext;
+
+type ParamsMap = Record<string, ParameterizedObject['params'] | undefined>;
+
 // ─── typedSetup（二段階API） ──────────────────────────────────────────
 
 export type TypedMachineDef<
   TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny,
   TInputSchema extends z.ZodTypeAny,
-  TActors extends Record<string, AnyActorLogic>,
+  TActors extends Record<string, UnknownActorLogic>,
+  TActions extends ParamsMap,
+  TGuards extends ParamsMap,
 > = {
-  /** イベント名 → ペイロード Zod スキーマ（payload なしは null） */
+  /** イベント名 → ペイロード Zod スキーマ（payload なしは `noPayload`） */
   readonly events: TEvents;
   /** context の Zod スキーマ。指定すると machine 内で context が型付けされる */
   readonly context?: TContextSchema;
@@ -55,6 +98,32 @@ export type TypedMachineDef<
   readonly input?: TInputSchema;
   /** invoke / spawn で使う actor logic。invoke.src に名前で参照する */
   readonly actors?: TActors;
+  /**
+   * 名前付き action。XState v5 の params 型を保持したまま透過する。
+   * config 側で `{ type: 'name', params: ... }` または `'name'` で参照できる。
+   */
+  readonly actions?: {
+    [K in keyof TActions]: ActionFunction<
+      ResolvedContext<TContextSchema>,
+      EventUnionFromMap<TEvents>,
+      EventUnionFromMap<TEvents>,
+      TActions[K],
+      ToProvidedActor<Record<never, never>, TActors>,
+      ToParameterizedObject<TActions>,
+      ToParameterizedObject<TGuards>,
+      never,
+      EventObject
+    >;
+  };
+  /** 名前付き guard。params 型を保持したまま透過する。 */
+  readonly guards?: {
+    [K in keyof TGuards]: GuardPredicate<
+      ResolvedContext<TContextSchema>,
+      EventUnionFromMap<TEvents>,
+      TGuards[K],
+      ToParameterizedObject<TGuards>
+    >;
+  };
   /** true でバリデーション失敗時に throw（デフォルト false = warn + no-op） */
   readonly strict?: boolean;
 };
@@ -62,22 +131,29 @@ export type TypedMachineDef<
 /**
  * 型を先に宣言し、後から machine config を検証する二段階 API。
  *
- * XState の `setup({ types }).createMachine(config)` を Zod 連携でラップする。
- * events / context を先に宣言することで、config 内の `assign` の `event` が
- * 遷移キーごとに自動 narrow され、`context` も型付けされる。
+ * XState の `setup({ types, actors, actions, guards }).createMachine(config)` を
+ * Zod 連携でラップする。events / context を先に宣言することで、config 内の
+ * `assign` の `event` が遷移キーごとに自動 narrow され、`context` も型付けされる。
+ * `actions` / `guards` は XState v5 の params 型を壊さず透過する。
  *
  * @example
- * const todo = typedSetup({
- *   context: z.object({ items: z.array(z.string()) }),
- *   events: {
- *     ADD: z.object({ item: z.string() }),
- *     CLEAR: noPayload, // = z.object({})
+ * const counter = typedSetup({
+ *   context: z.object({ count: z.number() }),
+ *   events: { INC: z.object({ by: z.number() }), RESET: noPayload },
+ *   actions: {
+ *     bump: assign({ count: ({ context }, params: { amount: number }) => context.count + params.amount }),
+ *   },
+ *   guards: {
+ *     underMax: ({ context }, params: { max: number }) => context.count < params.max,
  *   },
  * }).createMachine({
- *   context: { items: [] },
+ *   context: { count: 0 },
  *   on: {
- *     ADD: { actions: assign({ items: ({ context, event }) => [...context.items, event.item] }) },
- *     CLEAR: { actions: assign({ items: [] }) },
+ *     INC: {
+ *       guard: { type: 'underMax', params: { max: 10 } },
+ *       actions: { type: 'bump', params: { amount: 1 } },
+ *     },
+ *     RESET: { actions: assign({ count: 0 }) },
  *   },
  * });
  */
@@ -85,15 +161,20 @@ export function typedSetup<
   TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
-  TActors extends Record<string, AnyActorLogic> = Record<never, never>,
->(def: TypedMachineDef<TEvents, TContextSchema, TInputSchema, TActors>) {
+  TActors extends Record<string, UnknownActorLogic> = Record<never, never>,
+  TActions extends ParamsMap = Record<never, never>,
+  TGuards extends ParamsMap = Record<never, never>,
+>(def: TypedMachineDef<TEvents, TContextSchema, TInputSchema, TActors, TActions, TGuards>) {
   const s = setup({
     types: {} as {
-      context: z.infer<TContextSchema>;
+      context: ResolvedContext<TContextSchema>;
       events: EventUnionFromMap<TEvents>;
       input: z.infer<TInputSchema>;
     },
-    actors: (def.actors ?? {}) as TActors,
+    // setup の actors パラメータ型に合わせた境界キャスト
+    actors: def.actors as { [K in keyof TActors]: K extends keyof TActors ? TActors[K] : never },
+    actions: def.actions,
+    guards: def.guards,
   });
 
   const payload: SchemasPayload = {
