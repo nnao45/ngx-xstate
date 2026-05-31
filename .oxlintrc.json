@@ -28,7 +28,8 @@
     "max-lines-per-function": ["error", 80],
     "import/no-default-export": "error",
     "unicorn/no-useless-undefined": "off",
-    "unicorn/no-array-for-each": "off"
+    "unicorn/no-array-for-each": "off",
+    "unicorn/prefer-at": "off"
   },
   "overrides": [
     {

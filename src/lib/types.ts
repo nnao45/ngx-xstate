@@ -1,6 +1,7 @@
 import type { Actor, AnyActorLogic, SnapshotFrom } from 'xstate';
 import type { InspectionEvent } from 'xstate';
 import type { Signal, FactoryProvider } from '@angular/core';
+import type { StateMatcherFor } from './state-match';
 
 /**
  * send が受け付けるイベント型。typedSetup が生成する machine は
@@ -20,6 +21,11 @@ export interface InjectActorReturn<TLogic extends AnyActorLogic> {
   readonly snapshot: Signal<SnapshotFrom<TLogic>>;
   readonly send: (event: SendEvent<TLogic>) => void;
   readonly actorRef: Actor<TLogic>;
+  /**
+   * 現在状態に対する型安全な case/when マッチャ（一発読み）。
+   * `actor.in('idle').tap(idle => idle.send(...))` のように使う。
+   */
+  readonly in: StateMatcherFor<TLogic>['in'];
 }
 
 export interface ActorContext<TLogic extends AnyActorLogic> {

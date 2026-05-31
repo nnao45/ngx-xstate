@@ -10,6 +10,7 @@ import { getSchemas } from './schemas';
 import { buildActorOptions, injectActorRef, validateAndSend } from './inject-actor-ref';
 import type { InjectActorOptions, InjectActorReturn, SendEvent } from './types';
 import { shallowEqual } from './shallow-equal';
+import { buildStateMatcher, type StateMatcherFor } from './state-match';
 
 export function injectActor<TLogic extends AnyActorLogic>(
   logic: TLogic,
@@ -45,7 +46,15 @@ function buildStaticActor<TLogic extends AnyActorLogic>(
     validateAndSend(actorRef, event as Parameters<Actor<TLogic>['send']>[0], schemas);
   };
 
-  return { snapshot: snapshotSig.asReadonly(), send, actorRef };
+  // 一発読みの case/when マッチャ。scope.send は検証付き send を使う。
+  const inFn: StateMatcherFor<TLogic>['in'] = ((name: string) => {
+    const snap = actorRef.getSnapshot() as { value: never; context: unknown };
+    return buildStateMatcher(snap.value, send as (e: { type: string }) => void, snap.context).in(
+      name,
+    );
+  }) as never;
+
+  return { snapshot: snapshotSig.asReadonly(), send, actorRef, in: inFn };
 }
 
 function buildDynamicActor<TLogic extends AnyActorLogic>(
@@ -95,11 +104,19 @@ function buildDynamicActor<TLogic extends AnyActorLogic>(
     validateAndSend(currentActor, event as Parameters<Actor<TLogic>['send']>[0], schemas);
   };
 
+  const inFn: StateMatcherFor<TLogic>['in'] = ((name: string) => {
+    const snap = currentActor.getSnapshot() as { value: never; context: unknown };
+    return buildStateMatcher(snap.value, send as (e: { type: string }) => void, snap.context).in(
+      name,
+    );
+  }) as never;
+
   return {
     snapshot: snapshotSig.asReadonly(),
     send,
     get actorRef(): Actor<TLogic> {
       return currentActor;
     },
+    in: inFn,
   };
 }

@@ -11,6 +11,7 @@ import {
 import { z, type ZodDiscriminatedUnionOption } from 'zod';
 import { attachSchemas, type SchemasPayload } from './schemas';
 import type { EventsMap, EventUnionFromMap } from './typed-machine-types';
+import type { StateTreeOf, WithStateTree } from './state-match';
 
 /**
  * ペイロードを持たないイベントを表す Zod スキーマ（= `z.object({})`）。
@@ -205,12 +206,20 @@ export function typedSetup<
     strict: def.strict ?? false,
   };
 
-  // createMachine は s.createMachine と同一シグネチャ（完全な型推論を保つ）。
-  // 生成した machine にランタイムでスキーマを付与してから返す。
-  const createMachine = ((config: Parameters<typeof s.createMachine>[0]) => {
+  // createMachine は config を捕捉（const で状態名リテラルを保つ）し、生成した
+  // machine に①ランタイムスキーマ ②状態 Tree のブランド（matchActor / .in 用）を付与する。
+  // 返り値型は推論に任せる: `typeof machine` は config ごとに精密（snapshot/send/value を
+  // 保持）なので、それに StateTree ブランドを intersection するだけ。
+  const createMachine = <const TConfig extends Parameters<typeof s.createMachine>[0]>(
+    config: TConfig,
+  ) => {
     const machine = s.createMachine(config);
-    return attachSchemas(machine, payload);
-  }) as unknown as typeof s.createMachine;
+    return attachSchemas(machine, payload) as typeof machine &
+      WithStateTree<
+        typeof machine,
+        StateTreeOf<TConfig extends { states: infer S } ? S : Record<never, never>>
+      >;
+  };
 
   return { createMachine };
 }
