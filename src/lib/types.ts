@@ -1,34 +1,12 @@
 import type { Actor, AnyActorLogic, SnapshotFrom } from 'xstate';
 import type { InspectionEvent } from 'xstate';
-import type { z } from 'zod';
 import type { Signal, FactoryProvider } from '@angular/core';
-import type { SCHEMAS_KEY } from './define-actor-with-schema';
 
-export type SchematizedActor<
-  TLogic extends AnyActorLogic,
-  TCtx extends z.ZodTypeAny,
-  TEvents extends z.ZodTypeAny,
-  TInput extends z.ZodTypeAny,
-> = TLogic & {
-  readonly [SCHEMAS_KEY]: {
-    readonly context: TCtx | undefined;
-    readonly events: TEvents | undefined;
-    readonly input: TInput | undefined;
-    readonly strict: boolean;
-  };
-};
-
-export type AnySchematizedActor = SchematizedActor<
-  AnyActorLogic,
-  z.ZodTypeAny,
-  z.ZodTypeAny,
-  z.ZodTypeAny
->;
-
-export type SendEvent<TLogic extends AnyActorLogic> =
-  TLogic extends SchematizedActor<AnyActorLogic, z.ZodTypeAny, infer TEvents, z.ZodTypeAny>
-    ? z.infer<TEvents>
-    : Parameters<Actor<TLogic>['send']>[0];
+/**
+ * send が受け付けるイベント型。createTypedMachine が生成する machine は
+ * setup で完全に型付けされているため、machine 自身の send パラメータ型を使う。
+ */
+export type SendEvent<TLogic extends AnyActorLogic> = Parameters<Actor<TLogic>['send']>[0];
 
 export interface InjectActorOptions<TLogic extends AnyActorLogic> {
   readonly input?: Parameters<Actor<TLogic>['send']> extends never ? never : unknown;

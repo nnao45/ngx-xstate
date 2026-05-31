@@ -13,7 +13,10 @@ ngx-xstate/
 ├── specs/                         ← 設計仕様書（このディレクトリ）
 ├── src/
 │   ├── lib/
-│   │   ├── define-actor-with-schema.ts   ← defineActorWithSchema
+│   │   ├── typed-machine.ts             ← createTypedMachine（二段階API）
+│   │   ├── typed-machine-types.ts       ← EventsMap / EventUnionFromMap
+│   │   ├── schemas.ts                   ← attachSchemas / getSchemas（ランタイムスキーマ）
+│   │   ├── devtools.ts                  ← provideXstateDevtools
 │   │   ├── inject-actor.ts               ← injectActor
 │   │   ├── inject-actor-ref.ts           ← injectActorRef
 │   │   ├── inject-selector.ts            ← injectSelector + shallowEqual
@@ -73,7 +76,7 @@ ngx-xstate/
 ## `public-api.ts`
 
 ```typescript
-export { defineActorWithSchema } from './lib/define-actor-with-schema';
+export { createTypedMachine } from './lib/typed-machine';
 export { injectActor } from './lib/inject-actor';
 export { injectActorRef } from './lib/inject-actor-ref';
 export { injectSelector } from './lib/inject-selector';

@@ -1,9 +1,7 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
-    "baseUrl": "./",
     "declaration": false,
-    "downlevelIteration": true,
     "experimentalDecorators": true,
     "moduleResolution": "bundler",
     "module": "ES2022",

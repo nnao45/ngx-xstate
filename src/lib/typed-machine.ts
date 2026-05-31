@@ -1,47 +1,22 @@
-import { createMachine } from 'xstate';
+import { setup, type AnyActorLogic } from 'xstate';
 import { z, type ZodDiscriminatedUnionOption } from 'zod';
-import { defineActorWithSchema } from './define-actor-with-schema';
-import type {
-  AnyStateConfig,
-  AllEventKeys,
-  PayloadSchemas,
-  TypedEventUnion,
-} from './typed-machine-types';
+import { attachSchemas, type SchemasPayload } from './schemas';
+import type { EventsMap, EventUnionFromMap } from './typed-machine-types';
 
-// ─── Runtime: collect all `on` keys recursively ──────────────────────────────
-
-function collectOnKeys(config: AnyStateConfig, keys = new Set<string>()): Set<string> {
-  if (config.on != null) {
-    Object.keys(config.on).forEach((k) => keys.add(k));
-  }
-
-  if (config.states != null) {
-    Object.values(config.states).forEach((child) => collectOnKeys(child, keys));
-  }
-
-  return keys;
-}
-
-// ─── Runtime: build discriminatedUnion Zod schema ────────────────────────────
+// ─── Runtime: EventsMap から discriminatedUnion Zod スキーマを構築 ──────────────
 
 type TypedEventSchema = z.ZodObject<{ type: z.ZodLiteral<string> } & z.ZodRawShape>;
 
-function buildEventSchema(
-  onKeys: Set<string>,
-  payloads: Partial<Record<string, z.ZodObject<z.ZodRawShape>>>,
-): z.ZodTypeAny {
-  const schemas = Array.from(onKeys).map((key): TypedEventSchema => {
-    const payload = payloads[key];
+function buildEventSchema(events: EventsMap): z.ZodTypeAny {
+  const schemas = Object.entries(events).map(([key, payload]): TypedEventSchema => {
     const base = z.object({ type: z.literal(key) });
-    return (payload === undefined ? base : base.merge(payload)) as TypedEventSchema;
+    return (payload === null ? base : base.merge(payload)) as TypedEventSchema;
   });
 
-  // Destructure + narrow so neither a non-null assertion nor an `as` cast
-  // is needed to satisfy the discriminatedUnion's "at least two members" tuple.
+  // discriminatedUnion は「2要素以上」のタプルを要求するため分岐 + narrow する。
   const [first, second, ...rest] = schemas;
 
   if (first === undefined) {
-    // No `on` keys anywhere — fall back to an open event shape.
     return z.object({ type: z.string() });
   }
 
@@ -58,46 +33,76 @@ function buildEventSchema(
   return z.discriminatedUnion('type', duSchemas);
 }
 
-// ─── createTypedMachine ───────────────────────────────────────────────────────
+// ─── createTypedMachine（二段階API） ──────────────────────────────────────────
 
-export interface CreateTypedMachineOptions<
-  TPayloads extends Partial<PayloadSchemas>,
+export type TypedMachineDef<
+  TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny,
   TInputSchema extends z.ZodTypeAny,
-> {
-  readonly payloads?: TPayloads;
+  TActors extends Record<string, AnyActorLogic>,
+> = {
+  /** イベント名 → ペイロード Zod スキーマ（payload なしは null） */
+  readonly events: TEvents;
+  /** context の Zod スキーマ。指定すると machine 内で context が型付けされる */
   readonly context?: TContextSchema;
+  /** input の Zod スキーマ */
   readonly input?: TInputSchema;
+  /** invoke / spawn で使う actor logic。invoke.src に名前で参照する */
+  readonly actors?: TActors;
+  /** true でバリデーション失敗時に throw（デフォルト false = warn + no-op） */
   readonly strict?: boolean;
-}
+};
 
-// The return type is intentionally inferred, not annotated. An explicit
-// annotation would have to reproduce XState's full MachineSnapshot generic
-// (impractical) or collapse to AnyActorLogic — which makes SnapshotFrom<>
-// resolve to `any` and breaks snapshot/send typing. Inference preserves it.
+/**
+ * 型を先に宣言し、後から machine config を検証する二段階 API。
+ *
+ * XState の `setup({ types }).createMachine(config)` を Zod 連携でラップする。
+ * events / context を先に宣言することで、config 内の `assign` の `event` が
+ * 遷移キーごとに自動 narrow され、`context` も型付けされる。
+ *
+ * @example
+ * const todo = createTypedMachine({
+ *   context: z.object({ items: z.array(z.string()) }),
+ *   events: {
+ *     ADD: z.object({ item: z.string() }),
+ *     CLEAR: null,
+ *   },
+ * }).create({
+ *   context: { items: [] },
+ *   on: {
+ *     ADD: { actions: assign({ items: ({ context, event }) => [...context.items, event.item] }) },
+ *     CLEAR: { actions: assign({ items: [] }) },
+ *   },
+ * });
+ */
 export function createTypedMachine<
-  TConfig extends AnyStateConfig & Parameters<typeof createMachine>[0],
-  TPayloads extends Partial<Record<AllEventKeys<TConfig> & string, z.ZodObject<z.ZodRawShape>>> =
-    Record<never, never>,
+  TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
->(config: TConfig, options?: CreateTypedMachineOptions<TPayloads, TContextSchema, TInputSchema>) {
-  // createMachine receives TConfig directly — TypeScript infers the full machine type
-  // (context, events, states) without any 'as' cast losing information
-  const machine = createMachine(config);
-
-  const onKeys = collectOnKeys(config);
-  const payloads = (options?.payloads ?? {}) as Partial<Record<string, z.ZodObject<z.ZodRawShape>>>;
-  const eventSchema = buildEventSchema(onKeys, payloads) as z.ZodType<
-    TypedEventUnion<AllEventKeys<TConfig> & string, TPayloads>
-  >;
-
-  // Return type is inferred from defineActorWithSchema — preserves typeof machine
-  // so SnapshotFrom<ReturnType<createTypedMachine>> is fully typed (not any)
-  return defineActorWithSchema(machine, {
-    events: eventSchema,
-    context: options?.context,
-    input: options?.input,
-    strict: options?.strict ?? false,
+  TActors extends Record<string, AnyActorLogic> = Record<never, never>,
+>(def: TypedMachineDef<TEvents, TContextSchema, TInputSchema, TActors>) {
+  const s = setup({
+    types: {} as {
+      context: z.infer<TContextSchema>;
+      events: EventUnionFromMap<TEvents>;
+      input: z.infer<TInputSchema>;
+    },
+    actors: (def.actors ?? {}) as TActors,
   });
+
+  const payload: SchemasPayload = {
+    context: def.context,
+    events: buildEventSchema(def.events),
+    input: def.input,
+    strict: def.strict ?? false,
+  };
+
+  // create は s.createMachine と同一シグネチャ（完全な型推論を保つ）。
+  // 生成した machine にランタイムでスキーマを付与してから返す。
+  const create = ((config: Parameters<typeof s.createMachine>[0]) => {
+    const machine = s.createMachine(config);
+    return attachSchemas(machine, payload);
+  }) as unknown as typeof s.createMachine;
+
+  return { create };
 }

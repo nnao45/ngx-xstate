@@ -15,8 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --project tsconfig.lib.json --noEmit",
-    "lint": "oxlint --deny-warnings src examples",
+    "typecheck": "tsc --project tsconfig.lib.json --noEmit && tsc --project tsconfig.spec.json --noEmit",
+    "lint": "oxlint --type-aware --deny-warnings src examples",
     "format": "oxfmt --write 'src/**/*.ts' 'examples/**/*.ts'",
     "format:check": "oxfmt --check 'src/**/*.ts' 'examples/**/*.ts'",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
@@ -37,6 +37,7 @@
     "ng-packagr": "^20.3.2",
     "oxfmt": "^0.52.0",
     "oxlint": "^1.67.0",
+    "oxlint-tsgolint": "^0.23.0",
     "typescript": "~5.8.0",
     "vitest": "^3.0.0",
     "xstate": "^5.32.0",

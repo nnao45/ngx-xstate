@@ -14,44 +14,42 @@ import { assign } from 'xstate';
 import { z } from 'zod';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
-const authMachine = createTypedMachine(
-  {
-    id: 'auth',
-    initial: 'loggedOut',
-    context: { username: '' },
-    states: {
-      loggedOut: {
-        on: {
-          LOGIN: {
-            target: 'loggedIn',
-            actions: assign({
-              username: ({ event }: { event: { type: 'LOGIN'; username: string } }) =>
-                event.username,
-            }),
-          },
+const authMachine = createTypedMachine({
+  context: z.object({ username: z.string() }),
+  events: {
+    LOGIN: z.object({ username: z.string().min(1) }),
+    LOGOUT: null,
+    GO_IDLE: null,
+    WAKE_UP: null,
+  },
+}).create({
+  id: 'auth',
+  initial: 'loggedOut',
+  context: { username: '' },
+  states: {
+    loggedOut: {
+      on: {
+        LOGIN: {
+          target: 'loggedIn',
+          actions: assign({ username: ({ event }) => event.username }),
         },
       },
-      loggedIn: {
-        initial: 'active',
-        states: {
-          active: { on: { GO_IDLE: 'idle' } },
-          idle: { on: { WAKE_UP: 'active' } },
-        },
-        on: {
-          LOGOUT: {
-            target: 'loggedOut',
-            actions: assign({ username: '' }),
-          },
+    },
+    loggedIn: {
+      initial: 'active',
+      states: {
+        active: { on: { GO_IDLE: 'idle' } },
+        idle: { on: { WAKE_UP: 'active' } },
+      },
+      on: {
+        LOGOUT: {
+          target: 'loggedOut',
+          actions: assign({ username: '' }),
         },
       },
     },
   },
-  {
-    payloads: {
-      LOGIN: z.object({ username: z.string().min(1) }),
-    },
-  },
-);
+});
 
 describe('07: Compound States — Authentication flow', () => {
   beforeEach(() => {

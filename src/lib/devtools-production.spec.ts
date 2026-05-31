@@ -23,6 +23,8 @@ const { injectActor } = await import('./inject-actor');
 const { createTypedMachine } = await import('./typed-machine');
 
 const machine = createTypedMachine({
+  events: { GO: null },
+}).create({
   initial: 'a',
   states: { a: { on: { GO: 'b' } }, b: {} },
 });

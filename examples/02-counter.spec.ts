@@ -11,9 +11,14 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
+import { z } from 'zod';
 import { createTypedMachine, injectActor, injectActorRef, injectSelector } from '../src/public-api';
 
 const counterMachine = createTypedMachine({
+  // context スキーマを渡すと machine 内で context.count が number に型付けされる
+  context: z.object({ count: z.number() }),
+  events: { INCREMENT: null, DECREMENT: null, RESET: null },
+}).create({
   id: 'counter',
   context: { count: 0 },
   on: {

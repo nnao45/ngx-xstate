@@ -1,6 +1,6 @@
 import { DestroyRef, inject } from '@angular/core';
 import { createActor, type Actor, type AnyActorLogic, type InspectionEvent } from 'xstate';
-import { getSchemas, type SchemasPayload } from './define-actor-with-schema';
+import { getSchemas, type SchemasPayload } from './schemas';
 import { XSTATE_INSPECTOR } from './devtools';
 import type { InjectActorOptions } from './types';
 

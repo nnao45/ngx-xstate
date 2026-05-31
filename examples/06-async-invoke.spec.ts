@@ -12,31 +12,32 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign, fromPromise } from 'xstate';
+import { z } from 'zod';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
-interface User {
-  id: number;
-  name: string;
-}
+const userSchema = z.object({ id: z.number(), name: z.string() });
+type User = z.infer<typeof userSchema>;
 
 const fetchUserLogic = fromPromise<User, { userId: number }>(({ input }) =>
   Promise.resolve({ id: input.userId, name: `User ${input.userId}` }),
 );
 
 const fetchMachine = createTypedMachine({
+  context: z.object({ user: userSchema.nullable(), error: z.string().nullable() }),
+  events: { FETCH: null, RESET: null, RETRY: null },
+  // invoke する actor logic は actors に登録し、src で名前参照する
+  actors: { fetchUser: fetchUserLogic },
+}).create({
   id: 'fetch',
   initial: 'idle',
-  context: {
-    user: null as User | null,
-    error: null as string | null,
-  },
+  context: { user: null, error: null },
   states: {
     idle: {
       on: { FETCH: 'loading' },
     },
     loading: {
       invoke: {
-        src: fetchUserLogic,
+        src: 'fetchUser',
         input: { userId: 1 },
         onDone: {
           target: 'success',
@@ -63,13 +64,17 @@ const fetchMachine = createTypedMachine({
 });
 
 const failingFetchMachine = createTypedMachine({
+  context: z.object({ error: z.string().nullable() }),
+  events: { RETRY: null },
+  actors: { failing: fromPromise(() => Promise.reject(new Error('Network error'))) },
+}).create({
   id: 'failingFetch',
   initial: 'loading',
-  context: { error: null as string | null },
+  context: { error: null },
   states: {
     loading: {
       invoke: {
-        src: fromPromise(() => Promise.reject(new Error('Network error'))),
+        src: 'failing',
         onDone: { target: 'success' },
         onError: {
           target: 'error',

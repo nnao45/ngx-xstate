@@ -5,6 +5,7 @@ import { assign, createActor, createMachine } from 'xstate';
 import { injectSelector } from './inject-selector';
 
 const counterMachine = createMachine({
+  types: {} as { events: { type: 'INCREMENT' } | { type: 'SET_LABEL'; value: string } },
   id: 'counter',
   initial: 'active',
   context: { count: 0, label: 'counter' },
@@ -12,11 +13,7 @@ const counterMachine = createMachine({
     active: {
       on: {
         INCREMENT: { actions: assign({ count: ({ context }) => context.count + 1 }) },
-        SET_LABEL: {
-          actions: assign({
-            label: ({ event }: { event: { type: 'SET_LABEL'; value: string } }) => event.value,
-          }),
-        },
+        SET_LABEL: { actions: assign({ label: ({ event }) => event.value }) },
       },
     },
   },

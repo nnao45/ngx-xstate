@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign, createMachine } from 'xstate';
 import { z } from 'zod';
-import { defineActorWithSchema } from './define-actor-with-schema';
+import { createTypedMachine } from './typed-machine';
 import { injectActorRef, validateAndSend } from './inject-actor-ref';
 
 const counterMachine = createMachine({
@@ -53,9 +53,10 @@ describe('injectActorRef', () => {
 
   it('passes static input to actor', () => {
     const machineWithInput = createMachine({
+      types: {} as { input: { count: number }; context: { count: number } },
       id: 'withInput',
       initial: 'active',
-      context: ({ input }: { input: { count: number } }) => ({ count: input.count }),
+      context: ({ input }) => ({ count: input.count }),
       states: { active: {} },
     });
 
@@ -67,9 +68,10 @@ describe('injectActorRef', () => {
 
   it('passes function-form input to actor (resolves on creation)', () => {
     const machineWithInput = createMachine({
+      types: {} as { input: { count: number }; context: { count: number } },
       id: 'withFnInput',
       initial: 'active',
-      context: ({ input }: { input: { count: number } }) => ({ count: input.count }),
+      context: ({ input }) => ({ count: input.count }),
       states: { active: {} },
     });
 
@@ -80,15 +82,20 @@ describe('injectActorRef', () => {
   });
 
   it('warns on invalid input when strict=false', () => {
-    const inputSchema = z.object({ count: z.number() });
-    const schematized = defineActorWithSchema(counterMachine, {
-      input: inputSchema,
-      strict: false,
+    const machine = createTypedMachine({
+      context: z.object({ count: z.number() }),
+      input: z.object({ count: z.number() }),
+      events: {},
+    }).create({
+      id: 'inputWarn',
+      context: ({ input }) => ({ count: input.count }),
+      initial: 'active',
+      states: { active: {} },
     });
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     runInInjectionContext(() =>
-      injectActorRef(schematized, { input: { count: 'not-a-number' } as unknown as never }),
+      injectActorRef(machine, { input: { count: 'not-a-number' } as unknown as never }),
     );
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -99,15 +106,21 @@ describe('injectActorRef', () => {
   });
 
   it('throws on invalid input when strict=true', () => {
-    const inputSchema = z.object({ count: z.number() });
-    const schematized = defineActorWithSchema(counterMachine, {
-      input: inputSchema,
+    const machine = createTypedMachine({
+      context: z.object({ count: z.number() }),
+      input: z.object({ count: z.number() }),
+      events: {},
       strict: true,
+    }).create({
+      id: 'inputThrow',
+      context: ({ input }) => ({ count: input.count }),
+      initial: 'active',
+      states: { active: {} },
     });
 
     expect(() =>
       runInInjectionContext(() =>
-        injectActorRef(schematized, { input: { count: 'bad' } as unknown as never }),
+        injectActorRef(machine, { input: { count: 'bad' } as unknown as never }),
       ),
     ).toThrow();
   });
@@ -125,11 +138,7 @@ describe('validateAndSend', () => {
   });
 
   it('no-ops on invalid event when strict=false', () => {
-    const schematized = defineActorWithSchema(counterMachine, {
-      events: eventSchema,
-      strict: false,
-    });
-    const actor = runInInjectionContext(() => injectActorRef(schematized));
+    const actor = runInInjectionContext(() => injectActorRef(counterMachine));
     const schemas = { events: eventSchema, context: undefined, input: undefined, strict: false };
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 

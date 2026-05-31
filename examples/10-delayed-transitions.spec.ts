@@ -13,6 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
 const toastMachine = createTypedMachine({
+  events: { SHOW: null, DISMISS: null },
+}).create({
   id: 'toast',
   initial: 'hidden',
   states: {
@@ -25,6 +27,8 @@ const toastMachine = createTypedMachine({
 });
 
 const sessionMachine = createTypedMachine({
+  events: { ACTIVITY: null, LOGIN: null },
+}).create({
   id: 'session',
   initial: 'active',
   states: {

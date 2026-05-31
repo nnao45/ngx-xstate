@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
 const wizardMachine = createTypedMachine({
+  events: { NEXT: null, BACK: null, OPEN_SETTINGS: null, CLOSE: null },
+}).create({
   id: 'wizard',
   initial: 'wizard',
   states: {

@@ -166,49 +166,30 @@ describe('12-A: createActorContext — shared actor via Angular DI', () => {
 // Section B: createTypedMachine — on キー自動推論 + Zod ペイロード検証
 // =====================================================================
 
-// createTypedMachine: on キーからイベント型を自動推論。
-// ペイロードがあるイベントだけ payloads に Zod スキーマを追加する。
-const todoMachine = createTypedMachine(
-  {
-    id: 'todo',
-    context: { items: [] as string[] },
-    on: {
-      ADD: {
-        actions: assign({
-          items: ({
-            context,
-            event,
-          }: {
-            context: { items: string[] };
-            event: { type: 'ADD'; item: string };
-          }) => [...context.items, event.item],
-        }),
-      },
-      REMOVE: {
-        actions: assign({
-          items: ({
-            context,
-            event,
-          }: {
-            context: { items: string[] };
-            event: { type: 'REMOVE'; index: number };
-          }) => context.items.filter((_, i) => i !== event.index),
-        }),
-      },
-      CLEAR: { actions: assign({ items: [] }) },
-    },
+// createTypedMachine: 型を先に宣言（events + context）してから machine を生成。
+// payload あり (ZodObject) / なし (null) を events マップで指定する。
+// machine 内では event が遷移キーごとに自動 narrow され、注釈不要。
+const todoMachine = createTypedMachine({
+  context: z.object({ items: z.array(z.string()) }),
+  events: {
+    ADD: z.object({ item: z.string().min(1) }),
+    REMOVE: z.object({ index: z.number().int().nonnegative() }),
+    CLEAR: null,
   },
-  {
-    // ADD と REMOVE はペイロードを Zod で型付け
-    // CLEAR はペイロードなし → on キーから自動生成される
-    payloads: {
-      ADD: z.object({ item: z.string().min(1) }),
-      REMOVE: z.object({ index: z.number().int().nonnegative() }),
+  strict: false, // 不正イベントは warn + no-op
+}).create({
+  id: 'todo',
+  context: { items: [] },
+  on: {
+    ADD: { actions: assign({ items: ({ context, event }) => [...context.items, event.item] }) },
+    REMOVE: {
+      actions: assign({
+        items: ({ context, event }) => context.items.filter((_, i) => i !== event.index),
+      }),
     },
-    context: z.object({ items: z.array(z.string()) }),
-    strict: false, // 不正イベントは warn + no-op
+    CLEAR: { actions: assign({ items: [] }) },
   },
-);
+});
 
 describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () => {
   beforeEach(() => {
@@ -262,23 +243,17 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
   });
 
   it('strict mode throws on invalid event', () => {
-    const strictMachine = createTypedMachine(
-      {
-        id: 'strict',
-        context: { value: 0 },
-        on: {
-          SET: {
-            actions: assign({
-              value: ({ event }: { event: { type: 'SET'; n: number } }) => event.n,
-            }),
-          },
-        },
+    const strictMachine = createTypedMachine({
+      context: z.object({ value: z.number() }),
+      events: { SET: z.object({ n: z.number() }) },
+      strict: true,
+    }).create({
+      id: 'strict',
+      context: { value: 0 },
+      on: {
+        SET: { actions: assign({ value: ({ event }) => event.n }) },
       },
-      {
-        payloads: { SET: z.object({ n: z.number() }) },
-        strict: true,
-      },
-    );
+    });
 
     const { send } = TestBed.runInInjectionContext(() => injectActor(strictMachine));
 
@@ -288,15 +263,16 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
   });
 
   describe('dynamic input with injectActor', () => {
-    const machineWithInput = createTypedMachine(
-      {
-        id: 'withInput',
-        context: ({ input }: { input: { userId: string } }) => ({ userId: input.userId }),
-        initial: 'active',
-        states: { active: {} },
-      },
-      { context: z.object({ userId: z.string() }) },
-    );
+    const machineWithInput = createTypedMachine({
+      context: z.object({ userId: z.string() }),
+      input: z.object({ userId: z.string() }),
+      events: {},
+    }).create({
+      id: 'withInput',
+      context: ({ input }) => ({ userId: input.userId }),
+      initial: 'active',
+      states: { active: {} },
+    });
 
     it('accepts static input', () => {
       const { snapshot } = TestBed.runInInjectionContext(() =>

@@ -135,7 +135,7 @@ describe('provideXstateDevtools', () => {
 
       TestBed.runInInjectionContext(() =>
         injectActor(
-          createTypedMachine({
+          createTypedMachine({ events: { GO: null } }).create({
             initial: 'a',
             states: { a: { on: { GO: 'b' } }, b: {} },
           }),

@@ -6,7 +6,7 @@ import {
   type SnapshotFrom,
   type Subscription,
 } from 'xstate';
-import { getSchemas } from './define-actor-with-schema';
+import { getSchemas } from './schemas';
 import { buildActorOptions, injectActorRef, validateAndSend } from './inject-actor-ref';
 import type { InjectActorOptions, InjectActorReturn, SendEvent } from './types';
 import { shallowEqual } from './shallow-equal';

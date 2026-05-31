@@ -14,6 +14,7 @@ import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign, type InspectionEvent } from 'xstate';
+import { z } from 'zod';
 import {
   createActorContext,
   createTypedMachine,
@@ -22,6 +23,9 @@ import {
 } from '../src/public-api';
 
 const counterMachine = createTypedMachine({
+  context: z.object({ count: z.number() }),
+  events: { INCREMENT: null },
+}).create({
   id: 'devtoolsCounter',
   context: { count: 0 },
   on: {

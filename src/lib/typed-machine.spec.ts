@@ -14,9 +14,11 @@ function run<T>(fn: () => T): T {
   return result;
 }
 
-// ─── Basic machine (no payloads) ─────────────────────────────────────────────
+// ─── 基本 machine（payload なし） ─────────────────────────────────────────────
 
 const toggleMachine = createTypedMachine({
+  events: { TOGGLE: null },
+}).create({
   id: 'toggle',
   initial: 'inactive',
   states: {
@@ -25,40 +27,26 @@ const toggleMachine = createTypedMachine({
   },
 });
 
-// ─── Machine with payloads ────────────────────────────────────────────────────
+// ─── payload あり machine ──────────────────────────────────────────────────────
 
-const counterMachine = createTypedMachine(
-  {
-    id: 'counter',
-    context: { count: 0 },
-    on: {
-      INCREMENT: {
-        actions: assign({
-          count: ({ context }: { context: { count: number } }) => context.count + 1,
-        }),
-      },
-      DECREMENT: {
-        actions: assign({
-          count: ({ context }: { context: { count: number } }) => context.count - 1,
-        }),
-      },
-      SET: {
-        actions: assign({
-          count: ({ event }: { event: { type: 'SET'; value: number } }) => event.value,
-        }),
-      },
-    },
+const counterMachine = createTypedMachine({
+  context: z.object({ count: z.number() }),
+  events: { INCREMENT: null, DECREMENT: null, SET: z.object({ value: z.number() }) },
+}).create({
+  id: 'counter',
+  context: { count: 0 },
+  on: {
+    INCREMENT: { actions: assign({ count: ({ context }) => context.count + 1 }) },
+    DECREMENT: { actions: assign({ count: ({ context }) => context.count - 1 }) },
+    SET: { actions: assign({ count: ({ event }) => event.value }) },
   },
-  {
-    payloads: {
-      SET: z.object({ value: z.number() }),
-    },
-  },
-);
+});
 
-// ─── Nested machine ───────────────────────────────────────────────────────────
+// ─── ネスト machine ─────────────────────────────────────────────────────────────
 
 const authMachine = createTypedMachine({
+  events: { LOGIN: null, LOGOUT: null, GO_IDLE: null, WAKE_UP: null },
+}).create({
   id: 'auth',
   initial: 'loggedOut',
   states: {
@@ -120,7 +108,7 @@ describe('createTypedMachine', () => {
       const { snapshot, send } = run(() => injectActor(counterMachine));
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-      // value should be number, not string
+      // value は number であるべき
       send({ type: 'SET', value: 'not-a-number' } as never);
 
       expect(snapshot().context.count).toBe(0);
@@ -129,23 +117,17 @@ describe('createTypedMachine', () => {
     });
 
     it('throws on invalid payload in strict mode', () => {
-      const strictMachine = createTypedMachine(
-        {
-          id: 'strict',
-          context: { value: 0 },
-          on: {
-            SET: {
-              actions: assign({
-                value: ({ event }: { event: { type: 'SET'; n: number } }) => event.n,
-              }),
-            },
-          },
+      const strictMachine = createTypedMachine({
+        context: z.object({ value: z.number() }),
+        events: { SET: z.object({ n: z.number() }) },
+        strict: true,
+      }).create({
+        id: 'strict',
+        context: { value: 0 },
+        on: {
+          SET: { actions: assign({ value: ({ event }) => event.n }) },
         },
-        {
-          payloads: { SET: z.object({ n: z.number() }) },
-          strict: true,
-        },
-      );
+      });
 
       const { send } = run(() => injectActor(strictMachine));
       expect(() => {
@@ -154,23 +136,23 @@ describe('createTypedMachine', () => {
     });
   });
 
-  describe('nested state — AllEventKeys collects across all levels', () => {
+  describe('nested state — イベントが全階層から集約される', () => {
     it('collects events from top-level and nested states', () => {
       const { snapshot, send } = run(() => injectActor(authMachine));
 
-      // top-level event
+      // top-level イベント
       send({ type: 'LOGIN' });
       expect(snapshot().matches('loggedIn')).toBe(true);
 
-      // nested event (inside loggedIn)
+      // ネストイベント（loggedIn 内）
       send({ type: 'GO_IDLE' });
       expect(snapshot().value).toEqual({ loggedIn: 'idle' });
 
-      // nested event (inside loggedIn.idle)
+      // ネストイベント（loggedIn.idle 内）
       send({ type: 'WAKE_UP' });
       expect(snapshot().value).toEqual({ loggedIn: 'active' });
 
-      // back to top
+      // top へ戻る
       send({ type: 'LOGOUT' });
       expect(snapshot().value).toBe('loggedOut');
     });
@@ -187,17 +169,17 @@ describe('createTypedMachine', () => {
 
   describe('strict mode', () => {
     it('throws on unknown event type', () => {
-      const machine = createTypedMachine(
-        {
-          id: 'strictToggle',
-          initial: 'off',
-          states: {
-            off: { on: { ON: 'on' } },
-            on: { on: { OFF: 'off' } },
-          },
+      const machine = createTypedMachine({
+        events: { ON: null, OFF: null },
+        strict: true,
+      }).create({
+        id: 'strictToggle',
+        initial: 'off',
+        states: {
+          off: { on: { ON: 'on' } },
+          on: { on: { OFF: 'off' } },
         },
-        { strict: true },
-      );
+      });
 
       const { send } = run(() => injectActor(machine));
       expect(() => {
@@ -206,24 +188,18 @@ describe('createTypedMachine', () => {
     });
   });
 
-  describe('context + input schemas', () => {
-    it('validates context schema', () => {
-      const machine = createTypedMachine(
-        {
-          id: 'withContext',
-          context: { count: 0 },
-          on: {
-            INC: {
-              actions: assign({
-                count: ({ context }: { context: { count: number } }) => context.count + 1,
-              }),
-            },
-          },
+  describe('context schema', () => {
+    it('types and validates context', () => {
+      const machine = createTypedMachine({
+        context: z.object({ count: z.number() }),
+        events: { INC: null },
+      }).create({
+        id: 'withContext',
+        context: { count: 0 },
+        on: {
+          INC: { actions: assign({ count: ({ context }) => context.count + 1 }) },
         },
-        {
-          context: z.object({ count: z.number() }),
-        },
-      );
+      });
 
       const { snapshot, send } = run(() => injectActor(machine));
       send({ type: 'INC' });
@@ -231,8 +207,10 @@ describe('createTypedMachine', () => {
     });
   });
 
-  describe('parallel states — collectOnKeys covers all regions', () => {
+  describe('parallel states — 全領域のイベントを集約', () => {
     const playerMachine = createTypedMachine({
+      events: { PLAY: null, PAUSE: null, MUTE: null, UNMUTE: null },
+    }).create({
       id: 'player',
       type: 'parallel',
       states: {

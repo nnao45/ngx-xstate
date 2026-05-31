@@ -13,6 +13,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
 const mediaPlayerMachine = createTypedMachine({
+  events: {
+    PLAY: null,
+    PAUSE: null,
+    MUTE: null,
+    UNMUTE: null,
+    ENTER_FULLSCREEN: null,
+    EXIT_FULLSCREEN: null,
+  },
+}).create({
   id: 'mediaPlayer',
   type: 'parallel',
   states: {

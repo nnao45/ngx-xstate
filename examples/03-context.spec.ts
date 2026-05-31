@@ -14,40 +14,29 @@ import { assign } from 'xstate';
 import { z } from 'zod';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
-const formMachine = createTypedMachine(
-  {
-    id: 'form',
-    context: { name: '', email: '', submitted: false },
-    initial: 'editing',
-    states: {
-      editing: {
-        on: {
-          SET_NAME: {
-            actions: assign({
-              name: ({ event }: { event: { type: 'SET_NAME'; value: string } }) => event.value,
-            }),
-          },
-          SET_EMAIL: {
-            actions: assign({
-              email: ({ event }: { event: { type: 'SET_EMAIL'; value: string } }) => event.value,
-            }),
-          },
-          SUBMIT: {
-            target: 'submitted',
-            actions: assign({ submitted: true }),
-          },
-        },
+const formMachine = createTypedMachine({
+  context: z.object({ name: z.string(), email: z.string(), submitted: z.boolean() }),
+  events: {
+    SET_NAME: z.object({ value: z.string() }),
+    SET_EMAIL: z.object({ value: z.string().email() }),
+    SUBMIT: null,
+  },
+}).create({
+  id: 'form',
+  context: { name: '', email: '', submitted: false },
+  initial: 'editing',
+  states: {
+    editing: {
+      on: {
+        // event は遷移キーごとに自動 narrow。手動の型注釈は不要
+        SET_NAME: { actions: assign({ name: ({ event }) => event.value }) },
+        SET_EMAIL: { actions: assign({ email: ({ event }) => event.value }) },
+        SUBMIT: { target: 'submitted', actions: assign({ submitted: true }) },
       },
-      submitted: {},
     },
+    submitted: {},
   },
-  {
-    payloads: {
-      SET_NAME: z.object({ value: z.string() }),
-      SET_EMAIL: z.object({ value: z.string().email() }),
-    },
-  },
-);
+});
 
 describe('03: Context — Form data management', () => {
   beforeEach(() => {

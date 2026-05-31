@@ -89,8 +89,44 @@ Prettier 互換。既存コードに合わせた正準スタイル:
 
 ---
 
+## Type-aware リント（oxlint-tsgolint）
+
+`oxlint-tsgolint` を入れて `options.typeAware: true` で型認識リントを有効化。
+TS-Go ネイティブエンジンで型情報を使い、`no-unsafe-*` 系を解析する。
+
+```jsonc
+"options": { "typeAware": true },
+"rules": {
+  "typescript/no-unsafe-assignment": "error",
+  "typescript/no-unsafe-call": "error",
+  "typescript/no-unsafe-return": "error",
+  "typescript/no-unsafe-member-access": "error",
+  "typescript/no-unsafe-argument": "error",
+  "typescript/no-floating-promises": "error",
+  "typescript/no-unsafe-type-assertion": "off",      // 内部の Zod↔XState ブリッジ用 as を許可
+  "typescript/prefer-readonly-parameter-types": "off" // 過剰
+}
+```
+
+### tsgolint の前提
+
+- tsgolint の TS-Go エンジンは `baseUrl` / `downlevelIteration` を拒否するため
+  `tsconfig.json` から削除済み（ES2022 では両方とも不要）。
+
+### spec/examples で no-unsafe-* を緩める理由
+
+XState の `invoke` の `onDone.event.output` / `onError.event.error` は、actors を
+登録しても **tsgolint(TS-Go) の推論が tsc に追いつかず any と誤判定**することがある
+（`tsc --strict` では正しく型付く）。テスト/デモコードでこの誤検出に振り回されない
+よう、`**/*.spec.ts` と `examples/**` では `no-unsafe-return` /
+`no-unsafe-member-access` / `no-unsafe-argument` を off にする。
+**ライブラリ本体（src/lib の非 spec）は全 no-unsafe を厳格維持。**
+
+---
+
 ## 型安全の最終ゲートは tsc
 
-oxlint は型情報を使わない（型認識リントは限定的）。`no-unsafe-*` 系の
-型レベル保証は **`tsc --strict`**（`tsconfig.json`）が担う。oxlint は
-構文・パターンレベル、tsc は型レベル、という二層構成。
+oxlint type-aware（tsgolint）は補助。型レベルの真のゲートは **`tsc --strict`**
+（`tsconfig.lib.json` + `tsconfig.spec.json`）。`npm run typecheck` が lib と
+spec/examples の両方を tsc にかける。tsgolint と tsc で推論差がある場合は
+**tsc を正**とする。

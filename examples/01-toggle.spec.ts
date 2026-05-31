@@ -13,6 +13,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
 const toggleMachine = createTypedMachine({
+  // payload なしイベントは null。これだけで send が 'TOGGLE' に型付けされる
+  events: { TOGGLE: null },
+}).create({
   id: 'toggle',
   initial: 'inactive',
   states: {

@@ -5,15 +5,8 @@ export { injectActorRef } from './lib/inject-actor-ref';
 export { injectSelector } from './lib/inject-selector';
 export { createActorContext } from './lib/create-actor-context';
 
-export type {
-  SchematizedActor,
-  AnySchematizedActor,
-  InjectActorOptions,
-  InjectActorReturn,
-  ActorContext,
-  SendEvent,
-} from './lib/types';
+export type { InjectActorOptions, InjectActorReturn, ActorContext, SendEvent } from './lib/types';
 
-export type { AllEventKeys, TypedEventUnion } from './lib/typed-machine-types';
-
+export type { TypedMachineDef } from './lib/typed-machine';
+export type { EventsMap, EventUnionFromMap } from './lib/typed-machine-types';
 export type { XStateInspector } from './lib/devtools';

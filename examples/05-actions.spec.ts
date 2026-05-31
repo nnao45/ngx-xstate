@@ -13,6 +13,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign } from 'xstate';
+import { z } from 'zod';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
 describe('05: Actions', () => {
@@ -22,6 +23,9 @@ describe('05: Actions', () => {
 
   describe('transition actions — assign でコンテキスト更新', () => {
     const machine = createTypedMachine({
+      context: z.object({ count: z.number(), lastEvent: z.string() }),
+      events: { INCREMENT: null },
+    }).create({
       id: 'withTransitionAction',
       context: { count: 0, lastEvent: '' },
       on: {
@@ -48,6 +52,8 @@ describe('05: Actions', () => {
     const log: string[] = [];
 
     const machine = createTypedMachine({
+      events: { START: null, STOP: null },
+    }).create({
       id: 'withEntryExit',
       initial: 'idle',
       states: {
@@ -100,21 +106,20 @@ describe('05: Actions', () => {
 
   describe('action with event payload', () => {
     const machine = createTypedMachine({
+      context: z.object({ message: z.string() }),
+      events: { NOTIFY: z.object({ text: z.string() }) },
+    }).create({
       id: 'withPayload',
       context: { message: '' },
       on: {
-        NOTIFY: {
-          actions: assign({
-            message: ({ event }: { event: { type: 'NOTIFY'; text: string } }) => event.text,
-          }),
-        },
+        NOTIFY: { actions: assign({ message: ({ event }) => event.text }) },
       },
     });
 
     it('assigns event payload to context', () => {
       const { snapshot, send } = TestBed.runInInjectionContext(() => injectActor(machine));
 
-      send({ type: 'NOTIFY', text: 'Hello World' } as never);
+      send({ type: 'NOTIFY', text: 'Hello World' });
 
       expect(snapshot().context.message).toBe('Hello World');
     });
@@ -124,6 +129,9 @@ describe('05: Actions', () => {
     const sideEffect = vi.fn();
 
     const machine = createTypedMachine({
+      context: z.object({ count: z.number() }),
+      events: { DO: null },
+    }).create({
       id: 'multiAction',
       context: { count: 0 },
       on: {

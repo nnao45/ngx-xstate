@@ -11,9 +11,14 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign, fromPromise } from 'xstate';
+import { z } from 'zod';
 import { createTypedMachine, injectActor } from '../src/public-api';
 
 const checkoutMachine = createTypedMachine({
+  context: z.object({ orderId: z.string() }),
+  events: { PROCEED_TO_PAYMENT: null, PAY: null, CANCEL: null, FINISH: null },
+  actors: { processPayment: fromPromise(() => Promise.resolve({ orderId: 'ORD-001' })) },
+}).create({
   id: 'checkout',
   initial: 'cart',
   context: { orderId: '' },
@@ -29,12 +34,11 @@ const checkoutMachine = createTypedMachine({
     },
     processing: {
       invoke: {
-        src: fromPromise(() => Promise.resolve({ orderId: 'ORD-001' })),
+        src: 'processPayment',
         onDone: {
           target: 'confirmation',
-          actions: assign({
-            orderId: ({ event }) => (event.output as { orderId: string }).orderId,
-          }),
+          // event.output は processPayment の出力に型付けされる
+          actions: assign({ orderId: ({ event }) => event.output.orderId }),
         },
         onError: 'payment',
       },
@@ -47,6 +51,8 @@ const checkoutMachine = createTypedMachine({
 });
 
 const onboardingMachine = createTypedMachine({
+  events: { NEXT: null, BACK: null, COMPLETE: null },
+}).create({
   id: 'onboarding',
   initial: 'welcome',
   states: {

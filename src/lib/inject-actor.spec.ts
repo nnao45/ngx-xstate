@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign, createMachine } from 'xstate';
 import { z } from 'zod';
-import { defineActorWithSchema } from './define-actor-with-schema';
+import { createTypedMachine } from './typed-machine';
 import { injectActor } from './inject-actor';
 
 const counterMachine = createMachine({
@@ -20,10 +20,26 @@ const counterMachine = createMachine({
   },
 });
 
-const eventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('INCREMENT') }),
-  z.object({ type: z.literal('DECREMENT') }),
-]);
+// Zod スキーマ付き machine（createTypedMachine 経由）。strict 別に2つ。
+function makeTypedCounter(strict: boolean) {
+  return createTypedMachine({
+    context: z.object({ count: z.number() }),
+    events: { INCREMENT: null, DECREMENT: null },
+    strict,
+  }).create({
+    id: 'typedCounter',
+    initial: 'active',
+    context: { count: 0 },
+    states: {
+      active: {
+        on: {
+          INCREMENT: { actions: assign({ count: ({ context }) => context.count + 1 }) },
+          DECREMENT: { actions: assign({ count: ({ context }) => context.count - 1 }) },
+        },
+      },
+    },
+  });
+}
 
 function runInInjectionContext<T>(fn: () => T): T {
   let result!: T;
@@ -77,20 +93,14 @@ describe('injectActor', () => {
 
   describe('with Zod schema (strict: false)', () => {
     it('allows valid events', () => {
-      const machine = defineActorWithSchema(counterMachine, {
-        events: eventSchema,
-        strict: false,
-      });
+      const machine = makeTypedCounter(false);
       const { snapshot, send } = runInInjectionContext(() => injectActor(machine));
       send({ type: 'INCREMENT' });
       expect(snapshot().context.count).toBe(1);
     });
 
     it('warns and no-ops on invalid events', () => {
-      const machine = defineActorWithSchema(counterMachine, {
-        events: eventSchema,
-        strict: false,
-      });
+      const machine = makeTypedCounter(false);
       const { snapshot, send } = runInInjectionContext(() => injectActor(machine));
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -104,10 +114,7 @@ describe('injectActor', () => {
 
   describe('with Zod schema (strict: true)', () => {
     it('throws on invalid events', () => {
-      const machine = defineActorWithSchema(counterMachine, {
-        events: eventSchema,
-        strict: true,
-      });
+      const machine = makeTypedCounter(true);
       const { send } = runInInjectionContext(() => injectActor(machine));
       expect(() => {
         send({ type: 'RESET' } as never);
@@ -117,9 +124,10 @@ describe('injectActor', () => {
 
   describe('dynamic input', () => {
     const machineWithInput = createMachine({
+      types: {} as { input: { userId: string }; context: { userId: string } },
       id: 'withDynInput',
       initial: 'active',
-      context: ({ input }: { input: { userId: string } }) => ({ userId: input.userId }),
+      context: ({ input }) => ({ userId: input.userId }),
       states: { active: {} },
     });
 
@@ -171,21 +179,21 @@ describe('injectActor', () => {
 
     it('send routes to current actor after input change', () => {
       const machineWithSend = createMachine({
+        types: {} as {
+          input: { userId: string };
+          events: { type: 'INC' };
+          context: { userId: string; count: number };
+        },
         id: 'withDynSend',
         initial: 'active',
-        context: ({ input }: { input: { userId: string } }) => ({
+        context: ({ input }) => ({
           userId: input.userId,
-          count: 0 as number,
+          count: 0,
         }),
         states: {
           active: {
             on: {
-              INC: {
-                actions: assign({
-                  count: ({ context }: { context: { userId: string; count: number } }) =>
-                    context.count + 1,
-                }),
-              },
+              INC: { actions: assign({ count: ({ context }) => context.count + 1 }) },
             },
           },
         },
