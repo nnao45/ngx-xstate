@@ -4,7 +4,7 @@
  * このファイルは ngx-xstate 固有の API を示す。
  *
  * Section A: createActorContext    — Angular DI でコンポーネントツリーに actor を共有
- * Section B: createTypedMachine    — on キー自動推論 + Zod ペイロード検証
+ * Section B: typedSetup    — on キー自動推論 + Zod ペイロード検証
  */
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -13,7 +13,7 @@ import { assign, createMachine } from 'xstate';
 import { z } from 'zod';
 import {
   createActorContext,
-  createTypedMachine,
+  typedSetup,
   noPayload,
   injectActor,
   injectActorRef,
@@ -164,13 +164,13 @@ describe('12-A: createActorContext — shared actor via Angular DI', () => {
 });
 
 // =====================================================================
-// Section B: createTypedMachine — on キー自動推論 + Zod ペイロード検証
+// Section B: typedSetup — on キー自動推論 + Zod ペイロード検証
 // =====================================================================
 
-// createTypedMachine: 型を先に宣言（events + context）してから machine を生成。
+// typedSetup: 型を先に宣言（events + context）してから machine を生成。
 // payload あり (ZodObject) / なし (null) を events マップで指定する。
 // machine 内では event が遷移キーごとに自動 narrow され、注釈不要。
-const todoMachine = createTypedMachine({
+const todoMachine = typedSetup({
   context: z.object({ items: z.array(z.string()) }),
   events: {
     ADD: z.object({ item: z.string().min(1) }),
@@ -178,7 +178,7 @@ const todoMachine = createTypedMachine({
     CLEAR: noPayload,
   },
   strict: false, // 不正イベントは warn + no-op
-}).create({
+}).createMachine({
   id: 'todo',
   context: { items: [] },
   on: {
@@ -192,7 +192,7 @@ const todoMachine = createTypedMachine({
   },
 });
 
-describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () => {
+describe('12-B: typedSetup — auto-inferred events + Zod payloads', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   });
@@ -244,11 +244,11 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
   });
 
   it('strict mode throws on invalid event', () => {
-    const strictMachine = createTypedMachine({
+    const strictMachine = typedSetup({
       context: z.object({ value: z.number() }),
       events: { SET: z.object({ n: z.number() }) },
       strict: true,
-    }).create({
+    }).createMachine({
       id: 'strict',
       context: { value: 0 },
       on: {
@@ -264,11 +264,11 @@ describe('12-B: createTypedMachine — auto-inferred events + Zod payloads', () 
   });
 
   describe('dynamic input with injectActor', () => {
-    const machineWithInput = createTypedMachine({
+    const machineWithInput = typedSetup({
       context: z.object({ userId: z.string() }),
       input: z.object({ userId: z.string() }),
       events: {},
-    }).create({
+    }).createMachine({
       id: 'withInput',
       context: ({ input }) => ({ userId: input.userId }),
       initial: 'active',

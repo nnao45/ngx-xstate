@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, noPayload } from './typed-machine';
+import { typedSetup, noPayload } from './typed-machine';
 import { injectActor } from './inject-actor';
 
 function run<T>(fn: () => T): T {
@@ -16,9 +16,9 @@ function run<T>(fn: () => T): T {
 
 // ─── 基本 machine（payload なし） ─────────────────────────────────────────────
 
-const toggleMachine = createTypedMachine({
+const toggleMachine = typedSetup({
   events: { TOGGLE: noPayload },
-}).create({
+}).createMachine({
   id: 'toggle',
   initial: 'inactive',
   states: {
@@ -29,10 +29,10 @@ const toggleMachine = createTypedMachine({
 
 // ─── payload あり machine ──────────────────────────────────────────────────────
 
-const counterMachine = createTypedMachine({
+const counterMachine = typedSetup({
   context: z.object({ count: z.number() }),
   events: { INCREMENT: noPayload, DECREMENT: noPayload, SET: z.object({ value: z.number() }) },
-}).create({
+}).createMachine({
   id: 'counter',
   context: { count: 0 },
   on: {
@@ -44,9 +44,9 @@ const counterMachine = createTypedMachine({
 
 // ─── ネスト machine ─────────────────────────────────────────────────────────────
 
-const authMachine = createTypedMachine({
+const authMachine = typedSetup({
   events: { LOGIN: noPayload, LOGOUT: noPayload, GO_IDLE: noPayload, WAKE_UP: noPayload },
-}).create({
+}).createMachine({
   id: 'auth',
   initial: 'loggedOut',
   states: {
@@ -62,7 +62,7 @@ const authMachine = createTypedMachine({
   },
 });
 
-describe('createTypedMachine', () => {
+describe('typedSetup', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   });
@@ -117,11 +117,11 @@ describe('createTypedMachine', () => {
     });
 
     it('throws on invalid payload in strict mode', () => {
-      const strictMachine = createTypedMachine({
+      const strictMachine = typedSetup({
         context: z.object({ value: z.number() }),
         events: { SET: z.object({ n: z.number() }) },
         strict: true,
-      }).create({
+      }).createMachine({
         id: 'strict',
         context: { value: 0 },
         on: {
@@ -169,10 +169,10 @@ describe('createTypedMachine', () => {
 
   describe('strict mode', () => {
     it('throws on unknown event type', () => {
-      const machine = createTypedMachine({
+      const machine = typedSetup({
         events: { ON: noPayload, OFF: noPayload },
         strict: true,
-      }).create({
+      }).createMachine({
         id: 'strictToggle',
         initial: 'off',
         states: {
@@ -190,10 +190,10 @@ describe('createTypedMachine', () => {
 
   describe('context schema', () => {
     it('types and validates context', () => {
-      const machine = createTypedMachine({
+      const machine = typedSetup({
         context: z.object({ count: z.number() }),
         events: { INC: noPayload },
-      }).create({
+      }).createMachine({
         id: 'withContext',
         context: { count: 0 },
         on: {
@@ -208,9 +208,9 @@ describe('createTypedMachine', () => {
   });
 
   describe('parallel states — 全領域のイベントを集約', () => {
-    const playerMachine = createTypedMachine({
+    const playerMachine = typedSetup({
       events: { PLAY: noPayload, PAUSE: noPayload, MUTE: noPayload, UNMUTE: noPayload },
-    }).create({
+    }).createMachine({
       id: 'player',
       type: 'parallel',
       states: {

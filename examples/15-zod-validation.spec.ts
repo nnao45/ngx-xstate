@@ -1,7 +1,7 @@
 /**
  * 15: Zod ランタイムバリデーション活用
  *
- * createTypedMachine の events に複雑な Zod スキーマを与え、send() 時に
+ * typedSetup の events に複雑な Zod スキーマを与え、send() 時に
  * ペイロードがランタイム検証されることを多角的に確認する。
  *
  * - 形式 (email) / 範囲 (min/max/int) / enum / 配列 / ネストオブジェクト
@@ -14,7 +14,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign } from 'xstate';
 import { z, ZodError } from 'zod';
-import { createTypedMachine, injectActor, noPayload } from '../src/public-api';
+import { typedSetup, injectActor, noPayload } from '../src/public-api';
 
 function run<T>(fn: () => T): T {
   let result!: T;
@@ -35,7 +35,7 @@ const registrationContext = z.object({
 });
 
 const makeRegistration = (strict: boolean) =>
-  createTypedMachine({
+  typedSetup({
     context: registrationContext,
     events: {
       SET_EMAIL: z.object({ value: z.string().email() }),
@@ -57,7 +57,7 @@ const makeRegistration = (strict: boolean) =>
       RESET: noPayload,
     },
     strict,
-  }).create({
+  }).createMachine({
     id: 'registration',
     context: {
       email: '',

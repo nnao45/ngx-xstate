@@ -3,7 +3,7 @@ import type { InspectionEvent } from 'xstate';
 import type { Signal, FactoryProvider } from '@angular/core';
 
 /**
- * send が受け付けるイベント型。createTypedMachine が生成する machine は
+ * send が受け付けるイベント型。typedSetup が生成する machine は
  * setup で完全に型付けされているため、machine 自身の send パラメータ型を使う。
  */
 export type SendEvent<TLogic extends AnyActorLogic> = Parameters<Actor<TLogic>['send']>[0];

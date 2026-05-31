@@ -5,7 +5,7 @@
  * XState では context に任意のデータを格納できる。
  * injectSelector で必要な値だけを Signal として取り出せる。
  *
- * createTypedMachine: INCREMENT / DECREMENT / RESET を自動推論。
+ * typedSetup: INCREMENT / DECREMENT / RESET を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -13,18 +13,18 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
 import {
-  createTypedMachine,
+  typedSetup,
   noPayload,
   injectActor,
   injectActorRef,
   injectSelector,
 } from '../src/public-api';
 
-const counterMachine = createTypedMachine({
+const counterMachine = typedSetup({
   // context スキーマを渡すと machine 内で context.count が number に型付けされる
   context: z.object({ count: z.number() }),
   events: { INCREMENT: noPayload, DECREMENT: noPayload, RESET: noPayload },
-}).create({
+}).createMachine({
   id: 'counter',
   context: { count: 0 },
   on: {

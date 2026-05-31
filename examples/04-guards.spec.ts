@@ -4,7 +4,7 @@
  * guard は遷移の「門番」。条件を満たす場合だけ遷移を許可する。
  * XState v5 ではインライン関数として guard を直接書ける。
  *
- * createTypedMachine: guard はインラインで定義し setup() は不要。
+ * typedSetup: guard はインラインで定義し setup() は不要。
  * on キーから INCREMENT / DECREMENT / LOGIN / LOGOUT を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -12,13 +12,13 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
 // 最大値/最小値のガード付きカウンター — context 型付きでインラインガードも注釈不要
-const boundedCounterMachine = createTypedMachine({
+const boundedCounterMachine = typedSetup({
   context: z.object({ count: z.number() }),
   events: { INCREMENT: noPayload, DECREMENT: noPayload },
-}).create({
+}).createMachine({
   id: 'boundedCounter',
   context: { count: 5 },
   on: {
@@ -34,10 +34,10 @@ const boundedCounterMachine = createTypedMachine({
 });
 
 // ログイン状態によって遷移先が変わる machine
-const authMachine = createTypedMachine({
+const authMachine = typedSetup({
   context: z.object({ isAdmin: z.boolean() }),
   events: { LOGIN: noPayload, LOGOUT: noPayload },
-}).create({
+}).createMachine({
   id: 'auth',
   initial: 'loggedOut',
   context: { isAdmin: false },

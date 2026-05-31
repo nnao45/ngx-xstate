@@ -4,17 +4,17 @@
  * after() で一定時間後に自動で状態遷移させられる。
  * タイムアウト、自動ログアウト、トースト通知の非表示など。
  *
- * createTypedMachine: SHOW / DISMISS / LOGIN / ACTIVITY を自動推論。
+ * typedSetup: SHOW / DISMISS / LOGIN / ACTIVITY を自動推論。
  * テストでは vi.useFakeTimers() でタイマーを制御する。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
-const toastMachine = createTypedMachine({
+const toastMachine = typedSetup({
   events: { SHOW: noPayload, DISMISS: noPayload },
-}).create({
+}).createMachine({
   id: 'toast',
   initial: 'hidden',
   states: {
@@ -26,9 +26,9 @@ const toastMachine = createTypedMachine({
   },
 });
 
-const sessionMachine = createTypedMachine({
+const sessionMachine = typedSetup({
   events: { ACTIVITY: noPayload, LOGIN: noPayload },
-}).create({
+}).createMachine({
   id: 'session',
   initial: 'active',
   states: {

@@ -1,7 +1,7 @@
 /**
  * 14: 複雑な複数ステートマシン協調
  *
- * ngx-xstate (createTypedMachine + injectActor) が実用規模の machine でも
+ * ngx-xstate (typedSetup + injectActor) が実用規模の machine でも
  * 正しく動くことを実証する。
  *
  * A) invoke で子 machine を起動し output を親が受け取る
@@ -13,7 +13,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign, stopChild, type ActorRefFrom, type AnyActorRef } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, injectActor, noPayload } from '../src/public-api';
+import { typedSetup, injectActor, noPayload } from '../src/public-api';
 
 function run<T>(fn: () => T): T {
   let result!: T;
@@ -28,11 +28,11 @@ function run<T>(fn: () => T): T {
 // =====================================================================
 
 // 子: input から jobId を受け取り、working → done と遷移し output を返す。
-const workerMachine = createTypedMachine({
+const workerMachine = typedSetup({
   context: z.object({ jobId: z.string() }),
   input: z.object({ jobId: z.string() }),
   events: {},
-}).create({
+}).createMachine({
   id: 'worker',
   context: ({ input }) => ({ jobId: input.jobId }),
   initial: 'working',
@@ -43,11 +43,11 @@ const workerMachine = createTypedMachine({
   output: ({ context }) => ({ jobId: context.jobId }),
 });
 
-const managerMachine = createTypedMachine({
+const managerMachine = typedSetup({
   context: z.object({ completed: z.array(z.string()) }),
   events: { START: noPayload },
   actors: { worker: workerMachine },
-}).create({
+}).createMachine({
   id: 'manager',
   context: { completed: [] },
   initial: 'idle',
@@ -74,10 +74,10 @@ const managerMachine = createTypedMachine({
 // B) spawn で子 actor を動的生成、親 context が ActorRef 配列を保持
 // =====================================================================
 
-const counterChild = createTypedMachine({
+const counterChild = typedSetup({
   context: z.object({ n: z.number() }),
   events: { INC: noPayload },
-}).create({
+}).createMachine({
   id: 'counterChild',
   context: { n: 0 },
   on: { INC: { actions: assign({ n: ({ context }) => context.n + 1 }) } },
@@ -85,12 +85,12 @@ const counterChild = createTypedMachine({
 
 type CounterChildRef = ActorRefFrom<typeof counterChild>;
 
-const spawnerMachine = createTypedMachine({
+const spawnerMachine = typedSetup({
   // ActorRef は Zod では検証できないので z.custom で型だけ付ける
   context: z.object({ children: z.custom<CounterChildRef[]>(() => true) }),
   events: { SPAWN: noPayload, INC_ALL: noPayload, STOP_LAST: noPayload },
   actors: { counterChild },
-}).create({
+}).createMachine({
   id: 'spawner',
   context: { children: [] },
   on: {
@@ -119,7 +119,7 @@ const spawnerMachine = createTypedMachine({
 // C) parallel + ネスト compound + history + after + guard + final 全部入り
 // =====================================================================
 
-const trafficSystemMachine = createTypedMachine({
+const trafficSystemMachine = typedSetup({
   context: z.object({ pedestrianWaiting: z.boolean() }),
   events: {
     PED_BUTTON: noPayload,
@@ -127,7 +127,7 @@ const trafficSystemMachine = createTypedMachine({
     POWER_ON: noPayload,
     NEXT: noPayload,
   },
-}).create({
+}).createMachine({
   id: 'trafficSystem',
   initial: 'on',
   context: { pedestrianWaiting: false },

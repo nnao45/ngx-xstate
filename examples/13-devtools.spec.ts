@@ -17,16 +17,16 @@ import { assign, type InspectionEvent } from 'xstate';
 import { z } from 'zod';
 import {
   createActorContext,
-  createTypedMachine,
+  typedSetup,
   noPayload,
   injectActor,
   provideXstateDevtools,
 } from '../src/public-api';
 
-const counterMachine = createTypedMachine({
+const counterMachine = typedSetup({
   context: z.object({ count: z.number() }),
   events: { INCREMENT: noPayload },
-}).create({
+}).createMachine({
   id: 'devtoolsCounter',
   context: { count: 0 },
   on: {

@@ -39,7 +39,7 @@ function buildEventSchema(events: EventsMap): z.ZodTypeAny {
   return z.discriminatedUnion('type', duSchemas);
 }
 
-// ─── createTypedMachine（二段階API） ──────────────────────────────────────────
+// ─── typedSetup（二段階API） ──────────────────────────────────────────
 
 export type TypedMachineDef<
   TEvents extends EventsMap,
@@ -67,13 +67,13 @@ export type TypedMachineDef<
  * 遷移キーごとに自動 narrow され、`context` も型付けされる。
  *
  * @example
- * const todo = createTypedMachine({
+ * const todo = typedSetup({
  *   context: z.object({ items: z.array(z.string()) }),
  *   events: {
  *     ADD: z.object({ item: z.string() }),
  *     CLEAR: noPayload, // = z.object({})
  *   },
- * }).create({
+ * }).createMachine({
  *   context: { items: [] },
  *   on: {
  *     ADD: { actions: assign({ items: ({ context, event }) => [...context.items, event.item] }) },
@@ -81,7 +81,7 @@ export type TypedMachineDef<
  *   },
  * });
  */
-export function createTypedMachine<
+export function typedSetup<
   TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
@@ -103,12 +103,12 @@ export function createTypedMachine<
     strict: def.strict ?? false,
   };
 
-  // create は s.createMachine と同一シグネチャ（完全な型推論を保つ）。
+  // createMachine は s.createMachine と同一シグネチャ（完全な型推論を保つ）。
   // 生成した machine にランタイムでスキーマを付与してから返す。
-  const create = ((config: Parameters<typeof s.createMachine>[0]) => {
+  const createMachine = ((config: Parameters<typeof s.createMachine>[0]) => {
     const machine = s.createMachine(config);
     return attachSchemas(machine, payload);
   }) as unknown as typeof s.createMachine;
 
-  return { create };
+  return { createMachine };
 }

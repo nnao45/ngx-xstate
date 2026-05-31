@@ -12,7 +12,7 @@ Angular bindings for XState v5. The Angular equivalent of `@xstate/react`, built
 | 2 | Angular version | 19+ | `linkedSignal`, stable `input()`/`output()`, stable `DestroyRef` |
 | 3 | Function naming | `injectXxx` prefix | Matches Angular community convention (`injectQuery`, `injectParams`, etc.) |
 | 4 | Return type | Object `{ snapshot, send, actorRef }` | Named destructuring over tuple; Angularでは自然 |
-| 5 | Zod placement | `createTypedMachine(def).create(config)` 二段階 | 型を先に宣言→config検証。assign の event 自動 narrow。`defineActorWithSchema` は廃止 |
+| 5 | Zod placement | `typedSetup(def).createMachine(config)` 二段階 | 型を先に宣言→config検証。assign の event 自動 narrow。`defineActorWithSchema` は廃止 |
 | 6 | Validation failure | No-op default + `strict: true` | Consistent with XState's own no-op behavior for unknown events |
 | 7 | createActorContext | InjectionToken + `provideActor()` | Angular DI as the Provider equivalent |
 | 8 | Package structure | ng-packagr standalone | One package, no NX monorepo overhead |
@@ -30,7 +30,7 @@ Angular bindings for XState v5. The Angular equivalent of `@xstate/react`, built
 
 ```
 ngx-xstate
-├── createTypedMachine(def)                   → { create(config) → Machine }  (二段階API)
+├── typedSetup(def)                   → { createMachine(config) → Machine }  (二段階API)
 ├── injectActor(machine, options?)            → { snapshot, send, actorRef }
 ├── injectActorRef(machine, options?)         → Actor<T>
 ├── injectSelector(actorRef, selector)        → Signal<T>   (shallow equal by default)

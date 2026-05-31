@@ -1,4 +1,4 @@
-# `createTypedMachine()`
+# `typedSetup()`
 
 ## Purpose
 
@@ -26,7 +26,7 @@ TypeScript の評価順序の制約により、「単一呼び出しで `on` キ
 ## Signature
 
 ```typescript
-function createTypedMachine<
+function typedSetup<
   TEvents extends EventsMap,
   TContextSchema extends z.ZodTypeAny = z.ZodUnknown,
   TInputSchema extends z.ZodTypeAny = z.ZodUndefined,
@@ -71,9 +71,9 @@ type TypedMachineDef<...> = {
 ```typescript
 import { z } from 'zod';
 import { assign } from 'xstate';
-import { createTypedMachine, noPayload } from 'ngx-xstate';
+import { typedSetup, noPayload } from 'ngx-xstate';
 
-const todo = createTypedMachine({
+const todo = typedSetup({
   context: z.object({ items: z.array(z.string()) }),
   events: {
     ADD: z.object({ item: z.string() }),   // payload あり
@@ -81,7 +81,7 @@ const todo = createTypedMachine({
     CLEAR: noPayload,                       // payload なし (= z.object({}))
   },
   strict: false,
-}).create({
+}).createMachine({
   context: { items: [] },
   on: {
     // event は ADD 遷移内で { type:'ADD'; item:string } に自動 narrow。注釈不要
@@ -105,11 +105,11 @@ send({ type: 'TYPO' });            // ❌ コンパイルエラー
 名前参照する。`onDone` の `event.output` が actor の出力型に型付けされる。
 
 ```typescript
-const fetch = createTypedMachine({
+const fetch = typedSetup({
   context: z.object({ user: userSchema.nullable() }),
   events: { FETCH: null },
   actors: { fetchUser: fromPromise(({ input }) => api.getUser(input.id)) },
-}).create({
+}).createMachine({
   context: { user: null },
   initial: 'idle',
   states: {

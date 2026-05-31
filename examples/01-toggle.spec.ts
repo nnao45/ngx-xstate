@@ -4,18 +4,18 @@
  * 2つの状態 (inactive / active) を行き来する。
  * statecharts.dev の「基本的な状態機械」の概念そのもの。
  *
- * createTypedMachine: on キーから 'TOGGLE' を自動推論。
+ * typedSetup: on キーから 'TOGGLE' を自動推論。
  * send({ type: 'TYPO' }) はコンパイルエラーになる。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
-const toggleMachine = createTypedMachine({
+const toggleMachine = typedSetup({
   // payload なしイベントは null。これだけで send が 'TOGGLE' に型付けされる
   events: { TOGGLE: noPayload },
-}).create({
+}).createMachine({
   id: 'toggle',
   initial: 'inactive',
   states: {

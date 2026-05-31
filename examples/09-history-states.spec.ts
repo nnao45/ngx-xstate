@@ -4,16 +4,16 @@
  * history state は「最後にいた状態」を記憶する特殊な状態。
  * 割り込みから戻るときに元の状態に自動で復帰できる。
  *
- * createTypedMachine: NEXT / BACK / OPEN_SETTINGS / CLOSE を自動推論。
+ * typedSetup: NEXT / BACK / OPEN_SETTINGS / CLOSE を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
-const wizardMachine = createTypedMachine({
+const wizardMachine = typedSetup({
   events: { NEXT: noPayload, BACK: noPayload, OPEN_SETTINGS: noPayload, CLOSE: noPayload },
-}).create({
+}).createMachine({
   id: 'wizard',
   initial: 'wizard',
   states: {

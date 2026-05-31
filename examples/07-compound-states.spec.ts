@@ -4,7 +4,7 @@
  * 状態の中に状態を持てる (nested states)。
  * 典型例: 認証フロー (loggedIn の中に idle/active がある)
  *
- * createTypedMachine: LOGIN はペイロード (username) があるので
+ * typedSetup: LOGIN はペイロード (username) があるので
  * payloads に追加。LOGOUT / GO_IDLE / WAKE_UP は自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -12,9 +12,9 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
-const authMachine = createTypedMachine({
+const authMachine = typedSetup({
   context: z.object({ username: z.string() }),
   events: {
     LOGIN: z.object({ username: z.string().min(1) }),
@@ -22,7 +22,7 @@ const authMachine = createTypedMachine({
     GO_IDLE: noPayload,
     WAKE_UP: noPayload,
   },
-}).create({
+}).createMachine({
   id: 'auth',
   initial: 'loggedOut',
   context: { username: '' },

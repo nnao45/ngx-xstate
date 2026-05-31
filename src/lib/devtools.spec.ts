@@ -6,7 +6,7 @@ import { createActorContext } from './create-actor-context';
 import { provideXstateDevtools } from './devtools';
 import { injectActor } from './inject-actor';
 import { injectActorRef } from './inject-actor-ref';
-import { createTypedMachine, noPayload } from './typed-machine';
+import { typedSetup, noPayload } from './typed-machine';
 
 const counterMachine = createMachine({
   id: 'devCounter',
@@ -135,7 +135,7 @@ describe('provideXstateDevtools', () => {
 
       TestBed.runInInjectionContext(() =>
         injectActor(
-          createTypedMachine({ events: { GO: noPayload } }).create({
+          typedSetup({ events: { GO: noPayload } }).createMachine({
             initial: 'a',
             states: { a: { on: { GO: 'b' } }, b: {} },
           }),

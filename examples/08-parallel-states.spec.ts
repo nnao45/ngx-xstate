@@ -4,15 +4,15 @@
  * type: 'parallel' で複数の状態領域が同時に動く。
  * statecharts.dev の「並列状態」概念に直接対応。
  *
- * createTypedMachine: PLAY / PAUSE / MUTE / UNMUTE / ENTER_FULLSCREEN / EXIT_FULLSCREEN
+ * typedSetup: PLAY / PAUSE / MUTE / UNMUTE / ENTER_FULLSCREEN / EXIT_FULLSCREEN
  * を on キーから全領域横断で自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
-const mediaPlayerMachine = createTypedMachine({
+const mediaPlayerMachine = typedSetup({
   events: {
     PLAY: noPayload,
     PAUSE: noPayload,
@@ -21,7 +21,7 @@ const mediaPlayerMachine = createTypedMachine({
     ENTER_FULLSCREEN: noPayload,
     EXIT_FULLSCREEN: noPayload,
   },
-}).create({
+}).createMachine({
   id: 'mediaPlayer',
   type: 'parallel',
   states: {

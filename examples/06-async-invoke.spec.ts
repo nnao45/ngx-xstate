@@ -6,14 +6,14 @@
  * loading → success/error の典型的なフェッチパターン。
  *
  * fromPromise() で Promise を actor として扱う。
- * createTypedMachine: FETCH / RESET / RETRY を on キーから自動推論。
+ * typedSetup: FETCH / RESET / RETRY を on キーから自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign, fromPromise } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
 const userSchema = z.object({ id: z.number(), name: z.string() });
 type User = z.infer<typeof userSchema>;
@@ -22,12 +22,12 @@ const fetchUserLogic = fromPromise<User, { userId: number }>(({ input }) =>
   Promise.resolve({ id: input.userId, name: `User ${input.userId}` }),
 );
 
-const fetchMachine = createTypedMachine({
+const fetchMachine = typedSetup({
   context: z.object({ user: userSchema.nullable(), error: z.string().nullable() }),
   events: { FETCH: noPayload, RESET: noPayload, RETRY: noPayload },
   // invoke する actor logic は actors に登録し、src で名前参照する
   actors: { fetchUser: fetchUserLogic },
-}).create({
+}).createMachine({
   id: 'fetch',
   initial: 'idle',
   context: { user: null, error: null },
@@ -63,11 +63,11 @@ const fetchMachine = createTypedMachine({
   },
 });
 
-const failingFetchMachine = createTypedMachine({
+const failingFetchMachine = typedSetup({
   context: z.object({ error: z.string().nullable() }),
   events: { RETRY: noPayload },
   actors: { failing: fromPromise(() => Promise.reject(new Error('Network error'))) },
-}).create({
+}).createMachine({
   id: 'failingFetch',
   initial: 'loading',
   context: { error: null },

@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign, createMachine } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine } from './typed-machine';
+import { typedSetup } from './typed-machine';
 import { injectActorRef, validateAndSend } from './inject-actor-ref';
 
 const counterMachine = createMachine({
@@ -82,11 +82,11 @@ describe('injectActorRef', () => {
   });
 
   it('warns on invalid input when strict=false', () => {
-    const machine = createTypedMachine({
+    const machine = typedSetup({
       context: z.object({ count: z.number() }),
       input: z.object({ count: z.number() }),
       events: {},
-    }).create({
+    }).createMachine({
       id: 'inputWarn',
       context: ({ input }) => ({ count: input.count }),
       initial: 'active',
@@ -106,12 +106,12 @@ describe('injectActorRef', () => {
   });
 
   it('throws on invalid input when strict=true', () => {
-    const machine = createTypedMachine({
+    const machine = typedSetup({
       context: z.object({ count: z.number() }),
       input: z.object({ count: z.number() }),
       events: {},
       strict: true,
-    }).create({
+    }).createMachine({
       id: 'inputThrow',
       context: ({ input }) => ({ count: input.count }),
       initial: 'active',

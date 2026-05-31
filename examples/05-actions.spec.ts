@@ -7,14 +7,14 @@
  * - transition action: 遷移中に実行
  *
  * XState v5 ではインライン関数として entry / exit / actions を直接書ける。
- * createTypedMachine で on キーを自動推論。
+ * typedSetup で on キーを自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
 describe('05: Actions', () => {
   beforeEach(() => {
@@ -22,10 +22,10 @@ describe('05: Actions', () => {
   });
 
   describe('transition actions — assign でコンテキスト更新', () => {
-    const machine = createTypedMachine({
+    const machine = typedSetup({
       context: z.object({ count: z.number(), lastEvent: z.string() }),
       events: { INCREMENT: noPayload },
-    }).create({
+    }).createMachine({
       id: 'withTransitionAction',
       context: { count: 0, lastEvent: '' },
       on: {
@@ -51,9 +51,9 @@ describe('05: Actions', () => {
   describe('entry / exit actions — インライン関数で直接定義', () => {
     const log: string[] = [];
 
-    const machine = createTypedMachine({
+    const machine = typedSetup({
       events: { START: noPayload, STOP: noPayload },
-    }).create({
+    }).createMachine({
       id: 'withEntryExit',
       initial: 'idle',
       states: {
@@ -105,10 +105,10 @@ describe('05: Actions', () => {
   });
 
   describe('action with event payload', () => {
-    const machine = createTypedMachine({
+    const machine = typedSetup({
       context: z.object({ message: z.string() }),
       events: { NOTIFY: z.object({ text: z.string() }) },
-    }).create({
+    }).createMachine({
       id: 'withPayload',
       context: { message: '' },
       on: {
@@ -128,10 +128,10 @@ describe('05: Actions', () => {
   describe('multiple actions on one transition', () => {
     const sideEffect = vi.fn();
 
-    const machine = createTypedMachine({
+    const machine = typedSetup({
       context: z.object({ count: z.number() }),
       events: { DO: noPayload },
-    }).create({
+    }).createMachine({
       id: 'multiAction',
       context: { count: 0 },
       on: {

@@ -4,7 +4,7 @@
  * context は単純なカウンターだけでなく、複数のフィールドを持てる。
  * assign() で部分更新・計算更新が可能。
  *
- * createTypedMachine: SET_NAME / SET_EMAIL はペイロードがあるので
+ * typedSetup: SET_NAME / SET_EMAIL はペイロードがあるので
  * payloads に Zod スキーマを追加。SUBMIT はペイロードなしで自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -12,16 +12,16 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
-const formMachine = createTypedMachine({
+const formMachine = typedSetup({
   context: z.object({ name: z.string(), email: z.string(), submitted: z.boolean() }),
   events: {
     SET_NAME: z.object({ value: z.string() }),
     SET_EMAIL: z.object({ value: z.string().email() }),
     SUBMIT: noPayload,
   },
-}).create({
+}).createMachine({
   id: 'form',
   context: { name: '', email: '', submitted: false },
   initial: 'editing',

@@ -13,7 +13,7 @@ ngx-xstate/
 ├── specs/                         ← 設計仕様書（このディレクトリ）
 ├── src/
 │   ├── lib/
-│   │   ├── typed-machine.ts             ← createTypedMachine（二段階API）
+│   │   ├── typed-machine.ts             ← typedSetup（二段階API）
 │   │   ├── typed-machine-types.ts       ← EventsMap / EventUnionFromMap
 │   │   ├── schemas.ts                   ← attachSchemas / getSchemas（ランタイムスキーマ）
 │   │   ├── devtools.ts                  ← provideXstateDevtools
@@ -76,7 +76,7 @@ ngx-xstate/
 ## `public-api.ts`
 
 ```typescript
-export { createTypedMachine } from './lib/typed-machine';
+export { typedSetup } from './lib/typed-machine';
 export { injectActor } from './lib/inject-actor';
 export { injectActorRef } from './lib/inject-actor-ref';
 export { injectSelector } from './lib/inject-selector';

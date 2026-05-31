@@ -4,7 +4,7 @@
  * type: 'final' の状態は「終了状態」。
  * actor が final state に達すると done になる。
  *
- * createTypedMachine: PROCEED_TO_PAYMENT / PAY / CANCEL / FINISH /
+ * typedSetup: PROCEED_TO_PAYMENT / PAY / CANCEL / FINISH /
  * NEXT / BACK / COMPLETE を自動推論。
  */
 import { provideZonelessChangeDetection } from '@angular/core';
@@ -12,13 +12,13 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign, fromPromise } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
+import { typedSetup, noPayload, injectActor } from '../src/public-api';
 
-const checkoutMachine = createTypedMachine({
+const checkoutMachine = typedSetup({
   context: z.object({ orderId: z.string() }),
   events: { PROCEED_TO_PAYMENT: noPayload, PAY: noPayload, CANCEL: noPayload, FINISH: noPayload },
   actors: { processPayment: fromPromise(() => Promise.resolve({ orderId: 'ORD-001' })) },
-}).create({
+}).createMachine({
   id: 'checkout',
   initial: 'cart',
   context: { orderId: '' },
@@ -50,9 +50,9 @@ const checkoutMachine = createTypedMachine({
   },
 });
 
-const onboardingMachine = createTypedMachine({
+const onboardingMachine = typedSetup({
   events: { NEXT: noPayload, BACK: noPayload, COMPLETE: noPayload },
-}).create({
+}).createMachine({
   id: 'onboarding',
   initial: 'welcome',
   states: {
