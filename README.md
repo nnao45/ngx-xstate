@@ -36,6 +36,7 @@ class CounterComponent {
 - **Runtime validation** — events/context/input are validated against your Zod schemas at runtime (no-op by default, `strict: true` to throw).
 - **Automatic lifecycle** — actors start on inject and stop on component destroy via `DestroyRef`. Zero boilerplate.
 - **Stately Visualizer devtools** — one provider connects every machine in the app.
+- **State tree logging** — render machine structure or a running actor's active states as a plain text tree.
 
 ---
 
@@ -186,6 +187,28 @@ export const appConfig: ApplicationConfig = {
 
 A per-actor `inspect` option on `injectActor` overrides the global inspector for that actor.
 
+### `renderStateTree(machineOrActor)`
+
+Returns a plain text tree for logging, tests, or quick debugging. Passing a machine renders its static structure; passing a running actor also marks active states with `●`.
+
+```ts
+console.log(renderStateTree(machine));
+
+const { actorRef } = injectActor(machine);
+console.log(renderStateTree(actorRef));
+```
+
+Example output:
+
+```text
+checkout ●
+├─ cart  (initial)
+├─ paying ●
+│  ├─ entering ●  (initial)
+│  └─ confirming
+└─ done  (final)
+```
+
 ---
 
 ## Runtime validation
@@ -249,7 +272,7 @@ npm run build        # ng-packagr
 
 Tooling: **vitest** (jsdom, coverage v8), **oxlint** (type-aware) + **oxfmt** for lint/format.
 
-See [`examples/`](./examples) for 15 runnable spec files covering toggle, counter, context, guards, actions, async invoke, compound/parallel/history/final states, delayed transitions, devtools, and Zod validation. Design docs live in [`specs/`](./specs).
+See [`examples/`](./examples) for 17 runnable spec files covering toggle, counter, context, guards, actions, async invoke, compound/parallel/history/final states, delayed transitions, devtools, state tree logging, named actions/guards, and Zod validation. Design docs live in [`specs/`](./specs).
 
 ---
 
