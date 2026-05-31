@@ -10,10 +10,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const toastMachine = createTypedMachine({
-  events: { SHOW: null, DISMISS: null },
+  events: { SHOW: noPayload, DISMISS: noPayload },
 }).create({
   id: 'toast',
   initial: 'hidden',
@@ -27,7 +27,7 @@ const toastMachine = createTypedMachine({
 });
 
 const sessionMachine = createTypedMachine({
-  events: { ACTIVITY: null, LOGIN: null },
+  events: { ACTIVITY: noPayload, LOGIN: noPayload },
 }).create({
   id: 'session',
   initial: 'active',

@@ -12,14 +12,14 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const formMachine = createTypedMachine({
   context: z.object({ name: z.string(), email: z.string(), submitted: z.boolean() }),
   events: {
     SET_NAME: z.object({ value: z.string() }),
     SET_EMAIL: z.object({ value: z.string().email() }),
-    SUBMIT: null,
+    SUBMIT: noPayload,
   },
 }).create({
   id: 'form',

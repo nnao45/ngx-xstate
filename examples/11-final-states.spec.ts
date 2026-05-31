@@ -12,11 +12,11 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign, fromPromise } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const checkoutMachine = createTypedMachine({
   context: z.object({ orderId: z.string() }),
-  events: { PROCEED_TO_PAYMENT: null, PAY: null, CANCEL: null, FINISH: null },
+  events: { PROCEED_TO_PAYMENT: noPayload, PAY: noPayload, CANCEL: noPayload, FINISH: noPayload },
   actors: { processPayment: fromPromise(() => Promise.resolve({ orderId: 'ORD-001' })) },
 }).create({
   id: 'checkout',
@@ -51,7 +51,7 @@ const checkoutMachine = createTypedMachine({
 });
 
 const onboardingMachine = createTypedMachine({
-  events: { NEXT: null, BACK: null, COMPLETE: null },
+  events: { NEXT: noPayload, BACK: noPayload, COMPLETE: noPayload },
 }).create({
   id: 'onboarding',
   initial: 'welcome',

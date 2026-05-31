@@ -10,11 +10,11 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const toggleMachine = createTypedMachine({
   // payload なしイベントは null。これだけで send が 'TOGGLE' に型付けされる
-  events: { TOGGLE: null },
+  events: { TOGGLE: noPayload },
 }).create({
   id: 'toggle',
   initial: 'inactive',

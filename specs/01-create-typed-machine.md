@@ -35,10 +35,10 @@ function createTypedMachine<
   create: SetupInstance['createMachine'];
 };
 
-type EventsMap = Record<string, z.ZodObject<z.ZodRawShape> | null>;
+type EventsMap = Record<string, z.ZodObject<z.ZodRawShape>>;
 
 type TypedMachineDef<...> = {
-  events: TEvents;            // イベント名 → ペイロード Zod（payload なしは null）
+  events: TEvents;            // イベント名 → ペイロード Zod（payload なしは noPayload）
   context?: TContextSchema;   // context の Zod スキーマ
   input?: TInputSchema;       // input の Zod スキーマ
   actors?: TActors;           // invoke/spawn 用 actor logic
@@ -53,10 +53,13 @@ type TypedMachineDef<...> = {
 
 ## EventsMap
 
+全ての値が `z.ZodObject`。ペイロードなしは `noPayload`（= `z.object({})`）で表す。
+`null` は使わない（`z.null()` は「値が null」を意味し別物のため、Zod で統一）。
+
 | 値 | 意味 | 生成されるイベント型 |
 |---|---|---|
 | `z.object({...})` | ペイロードあり | `{ type: K } & z.infer<schema>` |
-| `null` | ペイロードなし | `{ type: K }` |
+| `noPayload` (= `z.object({})`) | ペイロードなし | `{ type: K }` |
 | （空マップ `{}`） | イベント未定義 | `{ type: string }`（緩いイベント型） |
 
 ---
@@ -68,14 +71,14 @@ type TypedMachineDef<...> = {
 ```typescript
 import { z } from 'zod';
 import { assign } from 'xstate';
-import { createTypedMachine } from 'ngx-xstate';
+import { createTypedMachine, noPayload } from 'ngx-xstate';
 
 const todo = createTypedMachine({
   context: z.object({ items: z.array(z.string()) }),
   events: {
     ADD: z.object({ item: z.string() }),   // payload あり
     REMOVE: z.object({ index: z.number() }),
-    CLEAR: null,                            // payload なし
+    CLEAR: noPayload,                       // payload なし (= z.object({}))
   },
   strict: false,
 }).create({

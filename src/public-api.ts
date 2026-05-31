@@ -1,4 +1,4 @@
-export { createTypedMachine } from './lib/typed-machine';
+export { createTypedMachine, noPayload } from './lib/typed-machine';
 export { provideXstateDevtools } from './lib/devtools';
 export { injectActor } from './lib/inject-actor';
 export { injectActorRef } from './lib/inject-actor-ref';

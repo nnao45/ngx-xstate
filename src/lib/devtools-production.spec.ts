@@ -20,10 +20,10 @@ vi.mock('@angular/core', async (importOriginal) => {
 // Imports must come AFTER vi.mock so they see the mocked isDevMode.
 const { provideXstateDevtools } = await import('./devtools');
 const { injectActor } = await import('./inject-actor');
-const { createTypedMachine } = await import('./typed-machine');
+const { createTypedMachine, noPayload } = await import('./typed-machine');
 
 const machine = createTypedMachine({
-  events: { GO: null },
+  events: { GO: noPayload },
 }).create({
   initial: 'a',
   states: { a: { on: { GO: 'b' } }, b: {} },

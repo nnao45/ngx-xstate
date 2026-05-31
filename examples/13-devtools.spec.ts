@@ -18,13 +18,14 @@ import { z } from 'zod';
 import {
   createActorContext,
   createTypedMachine,
+  noPayload,
   injectActor,
   provideXstateDevtools,
 } from '../src/public-api';
 
 const counterMachine = createTypedMachine({
   context: z.object({ count: z.number() }),
-  events: { INCREMENT: null },
+  events: { INCREMENT: noPayload },
 }).create({
   id: 'devtoolsCounter',
   context: { count: 0 },

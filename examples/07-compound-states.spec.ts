@@ -12,15 +12,15 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const authMachine = createTypedMachine({
   context: z.object({ username: z.string() }),
   events: {
     LOGIN: z.object({ username: z.string().min(1) }),
-    LOGOUT: null,
-    GO_IDLE: null,
-    WAKE_UP: null,
+    LOGOUT: noPayload,
+    GO_IDLE: noPayload,
+    WAKE_UP: noPayload,
   },
 }).create({
   id: 'auth',

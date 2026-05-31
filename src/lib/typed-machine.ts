@@ -3,6 +3,12 @@ import { z, type ZodDiscriminatedUnionOption } from 'zod';
 import { attachSchemas, type SchemasPayload } from './schemas';
 import type { EventsMap, EventUnionFromMap } from './typed-machine-types';
 
+/**
+ * ペイロードを持たないイベントを表す Zod スキーマ（= `z.object({})`）。
+ * `events` マップで `KEY: noPayload` と書くと `{ type: 'KEY' }` 型になる。
+ */
+export const noPayload: z.ZodObject<Record<never, never>> = z.object({});
+
 // ─── Runtime: EventsMap から discriminatedUnion Zod スキーマを構築 ──────────────
 
 type TypedEventSchema = z.ZodObject<{ type: z.ZodLiteral<string> } & z.ZodRawShape>;
@@ -10,7 +16,7 @@ type TypedEventSchema = z.ZodObject<{ type: z.ZodLiteral<string> } & z.ZodRawSha
 function buildEventSchema(events: EventsMap): z.ZodTypeAny {
   const schemas = Object.entries(events).map(([key, payload]): TypedEventSchema => {
     const base = z.object({ type: z.literal(key) });
-    return (payload === null ? base : base.merge(payload)) as TypedEventSchema;
+    return base.merge(payload) as TypedEventSchema;
   });
 
   // discriminatedUnion は「2要素以上」のタプルを要求するため分岐 + narrow する。
@@ -65,7 +71,7 @@ export type TypedMachineDef<
  *   context: z.object({ items: z.array(z.string()) }),
  *   events: {
  *     ADD: z.object({ item: z.string() }),
- *     CLEAR: null,
+ *     CLEAR: noPayload, // = z.object({})
  *   },
  * }).create({
  *   context: { items: [] },

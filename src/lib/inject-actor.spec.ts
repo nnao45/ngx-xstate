@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign, createMachine } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine } from './typed-machine';
+import { createTypedMachine, noPayload } from './typed-machine';
 import { injectActor } from './inject-actor';
 
 const counterMachine = createMachine({
@@ -24,7 +24,7 @@ const counterMachine = createMachine({
 function makeTypedCounter(strict: boolean) {
   return createTypedMachine({
     context: z.object({ count: z.number() }),
-    events: { INCREMENT: null, DECREMENT: null },
+    events: { INCREMENT: noPayload, DECREMENT: noPayload },
     strict,
   }).create({
     id: 'typedCounter',

@@ -14,7 +14,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 describe('05: Actions', () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('05: Actions', () => {
   describe('transition actions — assign でコンテキスト更新', () => {
     const machine = createTypedMachine({
       context: z.object({ count: z.number(), lastEvent: z.string() }),
-      events: { INCREMENT: null },
+      events: { INCREMENT: noPayload },
     }).create({
       id: 'withTransitionAction',
       context: { count: 0, lastEvent: '' },
@@ -52,7 +52,7 @@ describe('05: Actions', () => {
     const log: string[] = [];
 
     const machine = createTypedMachine({
-      events: { START: null, STOP: null },
+      events: { START: noPayload, STOP: noPayload },
     }).create({
       id: 'withEntryExit',
       initial: 'idle',
@@ -130,7 +130,7 @@ describe('05: Actions', () => {
 
     const machine = createTypedMachine({
       context: z.object({ count: z.number() }),
-      events: { DO: null },
+      events: { DO: noPayload },
     }).create({
       id: 'multiAction',
       context: { count: 0 },

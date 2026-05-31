@@ -12,12 +12,12 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 // 最大値/最小値のガード付きカウンター — context 型付きでインラインガードも注釈不要
 const boundedCounterMachine = createTypedMachine({
   context: z.object({ count: z.number() }),
-  events: { INCREMENT: null, DECREMENT: null },
+  events: { INCREMENT: noPayload, DECREMENT: noPayload },
 }).create({
   id: 'boundedCounter',
   context: { count: 5 },
@@ -36,7 +36,7 @@ const boundedCounterMachine = createTypedMachine({
 // ログイン状態によって遷移先が変わる machine
 const authMachine = createTypedMachine({
   context: z.object({ isAdmin: z.boolean() }),
-  events: { LOGIN: null, LOGOUT: null },
+  events: { LOGIN: noPayload, LOGOUT: noPayload },
 }).create({
   id: 'auth',
   initial: 'loggedOut',

@@ -10,16 +10,16 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const mediaPlayerMachine = createTypedMachine({
   events: {
-    PLAY: null,
-    PAUSE: null,
-    MUTE: null,
-    UNMUTE: null,
-    ENTER_FULLSCREEN: null,
-    EXIT_FULLSCREEN: null,
+    PLAY: noPayload,
+    PAUSE: noPayload,
+    MUTE: noPayload,
+    UNMUTE: noPayload,
+    ENTER_FULLSCREEN: noPayload,
+    EXIT_FULLSCREEN: noPayload,
   },
 }).create({
   id: 'mediaPlayer',

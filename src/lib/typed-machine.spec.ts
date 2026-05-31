@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { assign } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine } from './typed-machine';
+import { createTypedMachine, noPayload } from './typed-machine';
 import { injectActor } from './inject-actor';
 
 function run<T>(fn: () => T): T {
@@ -17,7 +17,7 @@ function run<T>(fn: () => T): T {
 // ─── 基本 machine（payload なし） ─────────────────────────────────────────────
 
 const toggleMachine = createTypedMachine({
-  events: { TOGGLE: null },
+  events: { TOGGLE: noPayload },
 }).create({
   id: 'toggle',
   initial: 'inactive',
@@ -31,7 +31,7 @@ const toggleMachine = createTypedMachine({
 
 const counterMachine = createTypedMachine({
   context: z.object({ count: z.number() }),
-  events: { INCREMENT: null, DECREMENT: null, SET: z.object({ value: z.number() }) },
+  events: { INCREMENT: noPayload, DECREMENT: noPayload, SET: z.object({ value: z.number() }) },
 }).create({
   id: 'counter',
   context: { count: 0 },
@@ -45,7 +45,7 @@ const counterMachine = createTypedMachine({
 // ─── ネスト machine ─────────────────────────────────────────────────────────────
 
 const authMachine = createTypedMachine({
-  events: { LOGIN: null, LOGOUT: null, GO_IDLE: null, WAKE_UP: null },
+  events: { LOGIN: noPayload, LOGOUT: noPayload, GO_IDLE: noPayload, WAKE_UP: noPayload },
 }).create({
   id: 'auth',
   initial: 'loggedOut',
@@ -170,7 +170,7 @@ describe('createTypedMachine', () => {
   describe('strict mode', () => {
     it('throws on unknown event type', () => {
       const machine = createTypedMachine({
-        events: { ON: null, OFF: null },
+        events: { ON: noPayload, OFF: noPayload },
         strict: true,
       }).create({
         id: 'strictToggle',
@@ -192,7 +192,7 @@ describe('createTypedMachine', () => {
     it('types and validates context', () => {
       const machine = createTypedMachine({
         context: z.object({ count: z.number() }),
-        events: { INC: null },
+        events: { INC: noPayload },
       }).create({
         id: 'withContext',
         context: { count: 0 },
@@ -209,7 +209,7 @@ describe('createTypedMachine', () => {
 
   describe('parallel states — 全領域のイベントを集約', () => {
     const playerMachine = createTypedMachine({
-      events: { PLAY: null, PAUSE: null, MUTE: null, UNMUTE: null },
+      events: { PLAY: noPayload, PAUSE: noPayload, MUTE: noPayload, UNMUTE: noPayload },
     }).create({
       id: 'player',
       type: 'parallel',

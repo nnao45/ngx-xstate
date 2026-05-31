@@ -13,7 +13,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assign, fromPromise } from 'xstate';
 import { z } from 'zod';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const userSchema = z.object({ id: z.number(), name: z.string() });
 type User = z.infer<typeof userSchema>;
@@ -24,7 +24,7 @@ const fetchUserLogic = fromPromise<User, { userId: number }>(({ input }) =>
 
 const fetchMachine = createTypedMachine({
   context: z.object({ user: userSchema.nullable(), error: z.string().nullable() }),
-  events: { FETCH: null, RESET: null, RETRY: null },
+  events: { FETCH: noPayload, RESET: noPayload, RETRY: noPayload },
   // invoke する actor logic は actors に登録し、src で名前参照する
   actors: { fetchUser: fetchUserLogic },
 }).create({
@@ -65,7 +65,7 @@ const fetchMachine = createTypedMachine({
 
 const failingFetchMachine = createTypedMachine({
   context: z.object({ error: z.string().nullable() }),
-  events: { RETRY: null },
+  events: { RETRY: noPayload },
   actors: { failing: fromPromise(() => Promise.reject(new Error('Network error'))) },
 }).create({
   id: 'failingFetch',

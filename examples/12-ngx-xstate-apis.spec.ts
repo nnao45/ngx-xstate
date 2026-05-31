@@ -14,6 +14,7 @@ import { z } from 'zod';
 import {
   createActorContext,
   createTypedMachine,
+  noPayload,
   injectActor,
   injectActorRef,
   injectSelector,
@@ -174,7 +175,7 @@ const todoMachine = createTypedMachine({
   events: {
     ADD: z.object({ item: z.string().min(1) }),
     REMOVE: z.object({ index: z.number().int().nonnegative() }),
-    CLEAR: null,
+    CLEAR: noPayload,
   },
   strict: false, // 不正イベントは warn + no-op
 }).create({

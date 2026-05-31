@@ -9,10 +9,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createTypedMachine, injectActor } from '../src/public-api';
+import { createTypedMachine, noPayload, injectActor } from '../src/public-api';
 
 const wizardMachine = createTypedMachine({
-  events: { NEXT: null, BACK: null, OPEN_SETTINGS: null, CLOSE: null },
+  events: { NEXT: noPayload, BACK: noPayload, OPEN_SETTINGS: noPayload, CLOSE: noPayload },
 }).create({
   id: 'wizard',
   initial: 'wizard',
