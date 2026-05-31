@@ -1,10 +1,28 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { setup } from 'xstate';
 import { z } from 'zod';
 import { injectActor } from './inject-actor';
 import { matchActor } from './state-match';
 import { typedSetup, noPayload } from './typed-machine';
+
+// typedSetup を通さない素の XState マシン（STATE_TREE ブランド無し）。
+// matchActor は StateSchemaFrom から状態名ツリーを導出してフォールバックする。
+const plainAuthMachine = setup({
+  types: {} as { events: { type: 'LOGIN' } | { type: 'LOGOUT' } | { type: 'GO_IDLE' } },
+}).createMachine({
+  id: 'plain-auth',
+  initial: 'loggedOut',
+  states: {
+    loggedOut: { on: { LOGIN: 'loggedIn' } },
+    loggedIn: {
+      initial: 'active',
+      states: { active: { on: { GO_IDLE: 'away' } }, away: {} },
+      on: { LOGOUT: 'loggedOut' },
+    },
+  },
+});
 
 const fetchMachine = typedSetup({
   context: z.object({ retries: z.number() }),
@@ -295,6 +313,78 @@ describe('state-match (matchActor / injectActor.in)', () => {
       });
 
       expect(snapshot().value).toBe('loading');
+    });
+  });
+
+  // typedSetup ブランドが無い素の setup マシンでも状態名が never に潰れず動く。
+  // scope.send は「全イベント許可」にフォールバック（状態別の絞り込みのみ失われる）。
+  describe('plain xstate setup machine (no typedSetup brand)', () => {
+    it('.in() matches a real top-level state name and sends', () => {
+      const { actorRef, snapshot } = run(() => injectActor(plainAuthMachine));
+
+      let ran = '';
+      matchActor(actorRef)
+        .in('loggedOut', (out) => {
+          ran = out.value; // 'loggedOut'（never ではない）
+          out.send({ type: 'LOGIN' });
+        })
+        .in('loggedIn', () => {
+          ran = 'loggedIn';
+        });
+
+      expect(ran).toBe('loggedOut');
+      expect(snapshot().value).toEqual({ loggedIn: 'active' });
+    });
+
+    it('.within() descends into a compound state derived from the schema', () => {
+      const { actorRef, snapshot, send } = run(() => injectActor(plainAuthMachine));
+      send({ type: 'LOGIN' }); // loggedIn.active
+
+      let ran = false;
+      matchActor(actorRef).within('loggedIn', (s) =>
+        s.in('active', (active) => {
+          ran = true;
+          active.send({ type: 'GO_IDLE' });
+        }),
+      );
+
+      expect(ran).toBe(true);
+      expect(snapshot().value).toEqual({ loggedIn: 'away' });
+    });
+
+    it('re-ascends and runs otherwise on a plain machine', () => {
+      const { actorRef } = run(() => injectActor(plainAuthMachine)); // loggedOut
+
+      let activeRan = false;
+      let otherwiseRan = false;
+      matchActor(actorRef)
+        .within('loggedIn', (s) =>
+          s.in('active', () => {
+            activeRan = true;
+          }),
+        )
+        .in('loggedIn', () => {}) // 不一致
+        .otherwise(() => {
+          otherwiseRan = true; // loggedOut に居る＝どのトップ分岐も未一致
+        });
+
+      expect(activeRan).toBe(false);
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('exposes in/within on injectActor for a plain machine', () => {
+      const { in: $in, within, snapshot } = run(() => injectActor(plainAuthMachine));
+
+      $in('loggedOut', (out) => {
+        out.send({ type: 'LOGIN' });
+      });
+      within('loggedIn', (s) =>
+        s.in('active', (active) => {
+          active.send({ type: 'GO_IDLE' });
+        }),
+      );
+
+      expect(snapshot().value).toEqual({ loggedIn: 'away' });
     });
   });
 });

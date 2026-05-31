@@ -1,4 +1,12 @@
-import type { Actor, AnyActorLogic, EventFromLogic, SnapshotFrom, StateValue } from 'xstate';
+import type {
+  Actor,
+  AnyActorLogic,
+  AnyStateMachine,
+  EventFromLogic,
+  SnapshotFrom,
+  StateSchemaFrom,
+  StateValue,
+} from 'xstate';
 
 // ─── 状態 Tree のブランド ───────────────────────────────────────────────────
 // typedSetup の createMachine が config を捕捉して machine 型に付与する phantom。
@@ -28,13 +36,33 @@ export type WithStateTree<TMachine, TTree extends StateTree> = TMachine & {
   readonly [STATE_TREE]?: TTree;
 };
 
-type TreeFromLogic<TLogic> = TLogic extends { [STATE_TREE]?: infer T }
-  ? T extends StateTree
-    ? T
-    : EmptyTree
+type EmptyTree = Record<never, never>;
+
+// brand 不在（素の xstate set() / createMachine）時のフォールバック。
+// XState は StateSchema の `on` を unknown に潰すため「状態別イベント」は型から
+// 復元できないが、`states` 階層（＝状態名ツリー）は保持される。そこからツリーを
+// 導出し、各ノードの有効イベントは machine 全イベントにフォールバックする。
+// → 状態名マッチ / .within / .otherwise は完全に効き、scope.send だけが全イベント許可になる。
+type AllEventTypes<TLogic extends AnyActorLogic> = EventFromLogic<TLogic>['type'] & string;
+
+type LooseTreeFromSchema<TSchema, TEvents extends string> = TSchema extends { states: infer S }
+  ? {
+      [K in keyof S & string]: {
+        events: TEvents;
+        children: LooseTreeFromSchema<S[K], TEvents>;
+      };
+    }
   : EmptyTree;
 
-type EmptyTree = Record<never, never>;
+type FallbackTree<TLogic extends AnyActorLogic> = TLogic extends AnyStateMachine
+  ? LooseTreeFromSchema<StateSchemaFrom<TLogic>, AllEventTypes<TLogic>>
+  : EmptyTree;
+
+type TreeFromLogic<TLogic extends AnyActorLogic> = TLogic extends { [STATE_TREE]?: infer T }
+  ? T extends StateTree
+    ? T
+    : FallbackTree<TLogic>
+  : FallbackTree<TLogic>;
 
 // ─── Matcher の型 ─────────────────────────────────────────────────────────────
 
