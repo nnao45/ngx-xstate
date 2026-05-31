@@ -47,14 +47,20 @@ function buildStaticActor<TLogic extends AnyActorLogic>(
   };
 
   // 一発読みの case/when マッチャ。scope.send は検証付き send を使う。
-  const inFn: StateMatcherFor<TLogic>['in'] = ((name: string) => {
+  const matcher = (): StateMatcherFor<TLogic> => {
     const snap = actorRef.getSnapshot() as { value: never; context: unknown };
-    return buildStateMatcher(snap.value, send as (e: { type: string }) => void, snap.context).in(
-      name,
-    );
-  }) as never;
+    return buildStateMatcher(
+      snap.value,
+      send as (e: { type: string }) => void,
+      snap.context,
+    ) as never;
+  };
+  const inFn: StateMatcherFor<TLogic>['in'] = ((name: never, cb: never) =>
+    matcher().in(name, cb)) as never;
+  const withinFn: StateMatcherFor<TLogic>['within'] = ((name: never, cb: never) =>
+    matcher().within(name, cb)) as never;
 
-  return { snapshot: snapshotSig.asReadonly(), send, actorRef, in: inFn };
+  return { snapshot: snapshotSig.asReadonly(), send, actorRef, in: inFn, within: withinFn };
 }
 
 function buildDynamicActor<TLogic extends AnyActorLogic>(
@@ -104,12 +110,18 @@ function buildDynamicActor<TLogic extends AnyActorLogic>(
     validateAndSend(currentActor, event as Parameters<Actor<TLogic>['send']>[0], schemas);
   };
 
-  const inFn: StateMatcherFor<TLogic>['in'] = ((name: string) => {
+  const matcher = (): StateMatcherFor<TLogic> => {
     const snap = currentActor.getSnapshot() as { value: never; context: unknown };
-    return buildStateMatcher(snap.value, send as (e: { type: string }) => void, snap.context).in(
-      name,
-    );
-  }) as never;
+    return buildStateMatcher(
+      snap.value,
+      send as (e: { type: string }) => void,
+      snap.context,
+    ) as never;
+  };
+  const inFn: StateMatcherFor<TLogic>['in'] = ((name: never, cb: never) =>
+    matcher().in(name, cb)) as never;
+  const withinFn: StateMatcherFor<TLogic>['within'] = ((name: never, cb: never) =>
+    matcher().within(name, cb)) as never;
 
   return {
     snapshot: snapshotSig.asReadonly(),
@@ -118,5 +130,6 @@ function buildDynamicActor<TLogic extends AnyActorLogic>(
       return currentActor;
     },
     in: inFn,
+    within: withinFn,
   };
 }

@@ -56,15 +56,12 @@ describe('state-match (matchActor / injectActor.in)', () => {
       const { snapshot, in: $in } = run(() => injectActor(fetchMachine));
 
       let ran = '';
-      $in('idle')
-        .tap((idle) => {
-          ran = idle.value;
-          idle.send({ type: 'FETCH' }); // idle → loading
-        })
-        .in('loading')
-        .tap(() => {
-          ran += ':loading';
-        });
+      $in('idle', (idle) => {
+        ran = idle.value;
+        idle.send({ type: 'FETCH' }); // idle → loading
+      }).in('loading', () => {
+        ran += ':loading';
+      });
 
       // idle 分岐だけ実行（chain 評価時は idle だったので loading 分岐は走らない）
       expect(ran).toBe('idle');
@@ -75,7 +72,7 @@ describe('state-match (matchActor / injectActor.in)', () => {
       const { snapshot, send, in: $in } = run(() => injectActor(fetchMachine));
       send({ type: 'FETCH' }); // → loading
 
-      $in('loading').tap((loading) => {
+      $in('loading', (loading) => {
         loading.send({ type: 'RESOLVE' });
       });
 
@@ -86,7 +83,7 @@ describe('state-match (matchActor / injectActor.in)', () => {
       const { in: $in } = run(() => injectActor(fetchMachine));
       let seen: { value: string; retries: number } | null = null;
 
-      $in('idle').tap((idle) => {
+      $in('idle', (idle) => {
         seen = { value: idle.value, retries: idle.context.retries };
       });
 
@@ -100,12 +97,10 @@ describe('state-match (matchActor / injectActor.in)', () => {
       send({ type: 'FETCH' }); // loading
 
       let fellThrough = false;
-      $in('idle')
-        .tap(() => {
-          throw new Error('should not run');
-        })
-        .in('success')
-        .tap(() => {
+      $in('idle', () => {
+        throw new Error('should not run');
+      })
+        .in('success', () => {
           throw new Error('should not run');
         })
         .otherwise(() => {
@@ -120,32 +115,29 @@ describe('state-match (matchActor / injectActor.in)', () => {
 
       let otherwiseRan = false;
       let idleRan = false;
-      $in('idle')
-        .tap(() => {
-          idleRan = true;
-        })
-        .otherwise(() => {
-          otherwiseRan = true;
-        });
+      $in('idle', () => {
+        idleRan = true;
+      }).otherwise(() => {
+        otherwiseRan = true;
+      });
 
       expect(idleRan).toBe(true);
       expect(otherwiseRan).toBe(false);
     });
   });
 
-  describe('nested states via .in().in()', () => {
-    it('matches nested loggedIn.active and forwards a child event', () => {
+  describe('nested states via .within()', () => {
+    it('descends into loggedIn.active and forwards a child event', () => {
       const { snapshot, send, actorRef } = run(() => injectActor(authMachine));
       send({ type: 'LOGIN' }); // loggedIn.active
 
       let ran = false;
-      matchActor(actorRef)
-        .in('loggedIn')
-        .in('active')
-        .tap((active) => {
+      matchActor(actorRef).within('loggedIn', (s) =>
+        s.in('active', (active) => {
           ran = true;
           active.send({ type: 'GO_IDLE' });
-        });
+        }),
+      );
 
       expect(ran).toBe(true);
       expect(snapshot().value).toEqual({ loggedIn: 'away' });
@@ -156,46 +148,105 @@ describe('state-match (matchActor / injectActor.in)', () => {
       send({ type: 'LOGIN' }); // active
 
       let awayRan = false;
-      matchActor(actorRef)
-        .in('loggedIn')
-        .in('away')
-        .tap(() => {
+      matchActor(actorRef).within('loggedIn', (s) =>
+        s.in('away', () => {
           awayRan = true;
-        });
+        }),
+      );
 
       expect(awayRan).toBe(false);
     });
 
-    it('does not match a sibling top-level state while in a compound state', () => {
-      const { send, actorRef } = run(() => injectActor(authMachine));
-      send({ type: 'LOGIN' }); // value = { loggedIn: 'active' }（object）
+    it('returns to the top level after a within block (re-ascent)', () => {
+      // ここが今回の肝。within で潜ったあとも外チェーンはトップのまま。
+      const { actorRef } = run(() => injectActor(authMachine)); // loggedOut
 
-      let ran = false;
-      // object 値に対し存在しないトップレベル名 → 不一致（seg not in value）
+      let activeRan = false;
+      let loggedOutRan = false;
       matchActor(actorRef)
-        .in('loggedOut')
-        .tap(() => {
-          ran = true;
+        .within('loggedIn', (s) =>
+          s.in('active', () => {
+            activeRan = true; // 親非アクティブ → 走らない
+          }),
+        )
+        .in('loggedOut', () => {
+          loggedOutRan = true; // within を抜けてトップ兄弟へ戻れている
         });
 
-      expect(ran).toBe(false);
+      expect(activeRan).toBe(false);
+      expect(loggedOutRan).toBe(true);
+    });
+
+    it('suppresses the inner otherwise when the parent is not active', () => {
+      const { actorRef } = run(() => injectActor(authMachine)); // loggedOut
+
+      let innerOtherwiseRan = false;
+      matchActor(actorRef).within('loggedIn', (s) => {
+        s.in('active', () => {}).otherwise(() => {
+          innerOtherwiseRan = true; // loggedIn に居ないので発火しない
+        });
+      });
+
+      expect(innerOtherwiseRan).toBe(false);
+    });
+
+    it('runs the inner otherwise when the parent is active but no child matched', () => {
+      const { send, actorRef } = run(() => injectActor(authMachine));
+      send({ type: 'LOGIN' }); // loggedIn.active
+
+      let innerOtherwiseRan = false;
+      matchActor(actorRef).within('loggedIn', (s) => {
+        s.in('away', () => {}) // active なので一致しない
+          .otherwise(() => {
+            innerOtherwiseRan = true;
+          });
+      });
+
+      expect(innerOtherwiseRan).toBe(true);
+    });
+
+    it('suppresses the outer otherwise when within matched the parent', () => {
+      const { send, actorRef } = run(() => injectActor(authMachine));
+      send({ type: 'LOGIN' }); // loggedIn.active
+
+      let outerOtherwiseRan = false;
+      matchActor(actorRef)
+        .within('loggedIn', (s) => s.in('active', () => {}))
+        .otherwise(() => {
+          outerOtherwiseRan = true; // loggedIn に居る＝トップは一致済み
+        });
+
+      expect(outerOtherwiseRan).toBe(false);
+    });
+
+    it('lets .in() handle a compound parent state directly', () => {
+      const { snapshot, send, actorRef } = run(() => injectActor(authMachine));
+      send({ type: 'LOGIN' }); // loggedIn.active
+
+      let ran = false;
+      // 親 loggedIn 自身の on(LOGOUT) を、子に潜らず .in で扱う
+      matchActor(actorRef).in('loggedIn', (loggedIn) => {
+        ran = true;
+        loggedIn.send({ type: 'LOGOUT' });
+      });
+
+      expect(ran).toBe(true);
+      expect(snapshot().value).toBe('loggedOut');
     });
 
     it('does not match a top-level state when in a different one', () => {
       const { actorRef } = run(() => injectActor(authMachine)); // loggedOut
 
       let ran = false;
-      matchActor(actorRef)
-        .in('loggedIn')
-        .tap(() => {
-          ran = true;
-        });
+      matchActor(actorRef).in('loggedIn', () => {
+        ran = true;
+      });
 
       expect(ran).toBe(false);
     });
   });
 
-  describe('injectActor with dynamic input exposes .in', () => {
+  describe('injectActor with dynamic input exposes .in / .within', () => {
     const inputMachine = typedSetup({
       context: z.object({ seed: z.string() }),
       input: z.object({ seed: z.string() }),
@@ -213,7 +264,7 @@ describe('state-match (matchActor / injectActor.in)', () => {
       );
 
       let ran = false;
-      $in('start').tap((start) => {
+      $in('start', (start) => {
         ran = true;
         start.send({ type: 'GO' });
       });
@@ -221,17 +272,27 @@ describe('state-match (matchActor / injectActor.in)', () => {
       expect(ran).toBe(true);
       expect(snapshot().value).toBe('done');
     });
+
+    it('exposes within on a dynamic-input actor', () => {
+      const { within } = run(() => injectActor(authMachine, { input: () => ({}) }));
+      // loggedOut なので潜っても何も走らないが、API が生えていることを確認
+      let ran = false;
+      within('loggedIn', (s) =>
+        s.in('active', () => {
+          ran = true;
+        }),
+      );
+      expect(ran).toBe(false);
+    });
   });
 
   describe('matchActor standalone (raw actorRef.send)', () => {
     it('matches and sends via the raw actor', () => {
       const { actorRef, snapshot } = run(() => injectActor(fetchMachine));
 
-      matchActor(actorRef)
-        .in('idle')
-        .tap((idle) => {
-          idle.send({ type: 'FETCH' });
-        });
+      matchActor(actorRef).in('idle', (idle) => {
+        idle.send({ type: 'FETCH' });
+      });
 
       expect(snapshot().value).toBe('loading');
     });

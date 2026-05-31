@@ -84,12 +84,11 @@ class ControlsComponent {
   readonly playback = PlayerContext.injectSelector((s) => JSON.stringify(s.value));
 
   play(): void {
-    matchActor(this.actor)
-      .in('on')
-      .in('playback')
-      .tap(() => {
+    matchActor(this.actor).within('on', (on) =>
+      on.in('playback', () => {
         // 親領域 playback の現在子状態にかかわらず PLAY を送る
-      });
+      }),
+    );
     this.actor.send({ type: 'PLAY' });
   }
 }
@@ -208,13 +207,13 @@ describe('20: E2E — realtime (parallel / history / delayed / DI share)', () =>
 
     // 並列領域 overlay を個別にマッチ
     let matched = false;
-    matchActor(cmp.actorRef)
-      .in('on')
-      .in('overlay')
-      .in('visible')
-      .tap(() => {
-        matched = true;
-      });
+    matchActor(cmp.actorRef).within('on', (on) =>
+      on.within('overlay', (overlay) =>
+        overlay.in('visible', () => {
+          matched = true;
+        }),
+      ),
+    );
     expect(matched).toBe(true);
 
     // 電源 OFF → ON で history により overlay の状態が復帰

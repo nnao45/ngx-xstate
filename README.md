@@ -35,7 +35,7 @@ class CounterComponent {
 - **Zod-typed events & context** — declare schemas once; `assign` events are auto-narrowed per transition, and `send()` payloads are fully type-checked.
 - **Runtime validation** — events/context/input are validated against your Zod schemas at runtime (no-op by default, `strict: true` to throw).
 - **Automatic lifecycle** — actors start on inject and stop on component destroy via `DestroyRef`. Zero boilerplate.
-- **State-scoped, type-safe dispatch** — `actor.in('idle').tap(idle => idle.send(...))` is a monadic `case/when` where `send` only accepts the events valid **in that state** (sending an event the state can't handle is a compile error).
+- **State-scoped, type-safe dispatch** — `actor.in('idle', idle => idle.send(...))` is a monadic `case/when` where `send` only accepts the events valid **in that state** (sending an event the state can't handle is a compile error); `.within('parent', s => ...)` descends into compound states.
 - **Named actions / guards** — declared with full XState v5 `params` types preserved.
 - **Stately Visualizer devtools** — one provider connects every machine in the app.
 - **State tree logging** — render machine structure or a running actor's active states as a plain text tree.
@@ -243,28 +243,36 @@ A monadic, state-scoped `case/when`. Each branch runs only when the actor is cur
 const actor = injectActor(fetchMachine);
 
 actor
-  .in('idle').tap(idle => {
+  .in('idle', idle => {
     idle.send({ type: 'FETCH' });   // ✅ valid in 'idle'
     idle.send({ type: 'RESOLVE' }); // ❌ compile error — 'idle' has no RESOLVE transition
   })
-  .in('loading').tap(loading => loading.send({ type: 'CANCEL' }))
+  .in('loading', loading => loading.send({ type: 'CANCEL' }))
   .otherwise(() => {/* in neither state */});
 ```
 
 | Method | On | Returns | Meaning |
 |---|---|---|---|
-| `.in(name)` | Matcher | `Branch` | Select a state at this level. |
-| `.tap(cb)` | Branch | `Matcher` (parent level) | Run `cb` if matched; chain a sibling = `case/when`. |
-| `.in(child)` | Branch | `Branch` | Descend into a nested state. |
+| `.in(name, cb)` | Matcher | `Matcher` (same level) | Run `cb` if currently in `name`; chain another = `case/when`. |
+| `.within(name, cb)` | Matcher | `Matcher` (same level) | Descend into compound state `name`; `cb` gets a child `Matcher`. |
 | `.otherwise(cb)` | Matcher | `void` | `default` clause — runs if no branch matched. |
 
-The `scope` passed to `.tap` is `{ send (narrowed), context (readonly), value }`. Nesting uses `.in().in()`:
+The `scope` passed to `.in`'s callback is `{ send (narrowed), context (readonly), value }`. `in` matches **at the current level only** (it never descends); use `.within()` to go deeper. Because `within` scopes the descent in a callback, the outer chain stays at the parent level — so you can drop back to a top-level branch right after:
 
 ```ts
-actor.in('loggedIn').in('active').tap(active => active.send({ type: 'GO_IDLE' }));
+actor
+  .in('loggedOut', o => o.send({ type: 'LOGIN' }))
+  .within('loggedIn', s => s
+    .in('active', a => a.send({ type: 'GO_IDLE' }))
+    .in('away',   _ => {})
+    .otherwise(() => {/* in loggedIn, but neither child */}))
+  .in('error', e => e.send({ type: 'RETRY' })) // ← still the top level
+  .otherwise(() => {/* in none of the top-level states */});
 ```
 
-`.in()` reads the current snapshot once (imperative — ideal for event handlers). For actors obtained via `injectActorRef` or `createActorContext`, use the standalone `matchActor(actorRef)`. Only machines built with `typedSetup` carry the per-state typing; a plain `createMachine` machine degrades the state names to `never`.
+`within` only accepts **compound** state names (passing a leaf is a compile error). A compound parent's own events are handled with `.in(name, cb)` — `.in('loggedIn', p => p.send({ type: 'LOGOUT' }))` matches whenever any `loggedIn` substate is active. A `within` block's `otherwise` fires only when the parent is active but no child matched; matching the parent suppresses the outer `otherwise`.
+
+`.in()` / `.within()` read the current snapshot once (imperative — ideal for event handlers). For actors obtained via `injectActorRef` or `createActorContext`, use the standalone `matchActor(actorRef)`. Only machines built with `typedSetup` carry the per-state typing; a plain `createMachine` machine degrades the state names to `never`.
 
 ---
 

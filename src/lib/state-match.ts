@@ -36,7 +36,7 @@ type TreeFromLogic<TLogic> = TLogic extends { [STATE_TREE]?: infer T }
 
 type EmptyTree = Record<never, never>;
 
-// ─── Matcher / Branch の型 ───────────────────────────────────────────────────
+// ─── Matcher の型 ─────────────────────────────────────────────────────────────
 
 /** 状態 S で有効なイベント（machine 全イベント union を on キーで絞り込む） */
 type EventsInNode<TNode extends StateNodeShape, TEvent> = Extract<
@@ -44,7 +44,13 @@ type EventsInNode<TNode extends StateNodeShape, TEvent> = Extract<
   { type: TNode['events'] }
 >;
 
-/** .tap に渡るスコープ */
+/** 子を持つ（＝潜れる）複合状態のキーだけ抽出する。葉状態は never に落ちる */
+type CompoundKeys<TTree extends StateTree> = {
+  [K in keyof TTree]: keyof TTree[K]['children'] extends never ? never : K;
+}[keyof TTree] &
+  string;
+
+/** in / within のコールバックに渡る、一致状態のスコープ */
 export interface StateScope<TNode extends StateNodeShape, TEvent, TContext, TName extends string> {
   /** この状態で有効なイベントだけ受け付ける send */
   readonly send: (event: EventsInNode<TNode, TEvent>) => void;
@@ -54,28 +60,27 @@ export interface StateScope<TNode extends StateNodeShape, TEvent, TContext, TNam
   readonly value: TName;
 }
 
-/** .in で選んだ 1 状態の分岐 */
-export interface Branch<
-  TNode extends StateNodeShape,
-  TName extends string,
-  TParentTree extends StateTree,
-  TEvent,
-  TContext,
-> {
-  /** 一致していれば cb を実行。兄弟へ戻る Matcher を返す */
-  tap(
-    cb: (scope: StateScope<TNode, TEvent, TContext, TName>) => void,
-  ): Matcher<TParentTree, TEvent, TContext>;
-  /** 子状態へ潜る */
-  in<CK extends keyof TNode['children'] & string>(
-    childName: CK,
-  ): Branch<TNode['children'][CK], CK, TNode['children'], TEvent, TContext>;
-}
-
-/** case/when チェーンの起点 */
+/**
+ * case/when チェーン。`in` はこの階層の状態を横に分岐し、`within` は複合状態の
+ * 子へスコープ付きで潜る（コールバックを抜けると外側＝この階層に戻る）。
+ */
 export interface Matcher<TTree extends StateTree, TEvent, TContext> {
-  in<K extends keyof TTree & string>(name: K): Branch<TTree[K], K, TTree, TEvent, TContext>;
-  /** どの .in にも一致しなかった時に実行 */
+  /** この階層の状態 name に現在一致していれば cb を実行。同じ階層の Matcher を返す */
+  in<K extends keyof TTree & string>(
+    name: K,
+    cb: (scope: StateScope<TTree[K], TEvent, TContext, K>) => void,
+  ): Matcher<TTree, TEvent, TContext>;
+  /**
+   * 複合状態 name の子へ潜る。cb には子状態を対象にした Matcher が渡る。
+   * cb を抜けると外側（この階層）の Matcher を返すので、続けて別のトップ状態を
+   * `.in()` / `.within()` できる。
+   */
+  within<K extends CompoundKeys<TTree>>(
+    name: K,
+    // 戻り値は無視する。`s => s.in(...)` のショートハンドで子 Matcher を返せるよう unknown。
+    cb: (child: Matcher<TTree[K]['children'], TEvent, TContext>) => unknown,
+  ): Matcher<TTree, TEvent, TContext>;
+  /** どの分岐にも一致しなかった時に実行（default） */
   otherwise(cb: () => void): void;
 }
 
@@ -103,29 +108,6 @@ function pathMatches(value: StateValue, path: readonly string[]): boolean {
   return true;
 }
 
-function makeBranch(
-  path: readonly string[],
-  value: StateValue,
-  send: SendFn,
-  context: unknown,
-  matched: MatchedRef,
-): Branch<StateNodeShape, string, StateTree, unknown, unknown> {
-  const active = pathMatches(value, path);
-  return {
-    tap(cb) {
-      if (active) {
-        matched.matched = true;
-        cb({ send, context, value: path[path.length - 1] as string } as never);
-      }
-      // 親レベルの兄弟へ戻る
-      return makeMatcher(path.slice(0, -1), value, send, context, matched) as never;
-    },
-    in(childName) {
-      return makeBranch([...path, childName], value, send, context, matched) as never;
-    },
-  };
-}
-
 function makeMatcher(
   parentPath: readonly string[],
   value: StateValue,
@@ -133,14 +115,28 @@ function makeMatcher(
   context: unknown,
   matched: MatchedRef,
 ): Matcher<StateTree, unknown, unknown> {
-  return {
-    in(name) {
-      return makeBranch([...parentPath, name], value, send, context, matched) as never;
+  const self: Matcher<StateTree, unknown, unknown> = {
+    in(name, cb) {
+      if (pathMatches(value, [...parentPath, name])) {
+        matched.matched = true;
+        cb({ send, context, value: name } as never);
+      }
+      return self;
+    },
+    within(name, cb) {
+      const childPath = [...parentPath, name];
+      const parentActive = pathMatches(value, childPath);
+      // 親が非アクティブなら子の otherwise を抑制するため matched を true で seed する
+      const child = makeMatcher(childPath, value, send, context, { matched: !parentActive });
+      cb(child as never);
+      if (parentActive) matched.matched = true;
+      return self;
     },
     otherwise(cb) {
       if (!matched.matched) cb();
     },
   };
+  return self;
 }
 
 /** 特定 logic に対する型付き Matcher */
@@ -165,13 +161,16 @@ export function buildStateMatcher(
 /**
  * actor の現在状態に対する型安全な case/when マッチャを作る。
  *
- * `.in(name)` で状態を選び、`.tap(scope => ...)` はその状態のときだけ実行される。
- * `scope.send` はその状態で有効なイベントだけを受け付ける。`.in().in()` で子状態に潜れる。
+ * `.in(name, scope => ...)` はその状態のときだけ cb を実行し、`scope.send` はその状態で
+ * 有効なイベントだけを受け付ける。`.within(name, child => ...)` で複合状態の子へ潜り、
+ * コールバックを抜けると外側（同じ階層）に戻るので別のトップ状態を続けて分岐できる。
  *
  * @example
  * matchActor(actorRef)
- *   .in('idle').tap(idle => idle.send({ type: 'FETCH' }))
- *   .in('loading').tap(l => l.send({ type: 'CANCEL' }))
+ *   .in('idle', idle => idle.send({ type: 'FETCH' }))
+ *   .in('loading', l => l.send({ type: 'CANCEL' }))
+ *   .within('loggedIn', s => s
+ *     .in('active', a => a.send({ type: 'GO_IDLE' })))
  *   .otherwise(() => {});
  */
 export function matchActor<TLogic extends AnyActorLogic>(

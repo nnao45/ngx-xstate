@@ -23,9 +23,14 @@ export interface InjectActorReturn<TLogic extends AnyActorLogic> {
   readonly actorRef: Actor<TLogic>;
   /**
    * 現在状態に対する型安全な case/when マッチャ（一発読み）。
-   * `actor.in('idle').tap(idle => idle.send(...))` のように使う。
+   * `actor.in('idle', idle => idle.send(...))` のように使う。
    */
   readonly in: StateMatcherFor<TLogic>['in'];
+  /**
+   * 複合状態の子へ潜るスコープ付きマッチャ（一発読み）。
+   * `actor.within('loggedIn', s => s.in('active', a => a.send(...)))` のように使う。
+   */
+  readonly within: StateMatcherFor<TLogic>['within'];
 }
 
 export interface ActorContext<TLogic extends AnyActorLogic> {
