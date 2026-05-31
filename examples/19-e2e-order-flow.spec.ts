@@ -110,13 +110,13 @@ class OrderComponent {
 
   add(item: string): void {
     // cart のときだけ ADD を送れる（型安全）
-    this.actor.in('cart').tap((cart) => {
+    this.actor.in('cart', (cart) => {
       cart.send({ type: 'ADD', item });
     });
   }
 
   checkout(): void {
-    this.actor.in('cart').tap((cart) => {
+    this.actor.in('cart', (cart) => {
       cart.send({ type: 'CHECKOUT' });
     });
   }
@@ -207,13 +207,11 @@ describe('19: E2E — order flow (all features)', () => {
 
     let ran = '';
     matchActor(cmp.actor.actorRef)
-      .in('cart')
-      .tap((cart) => {
+      .in('cart', (cart) => {
         ran = 'cart';
         cart.send({ type: 'ADD', item: 'x' });
       })
-      .in('confirmed')
-      .tap(() => {
+      .in('confirmed', () => {
         ran = 'confirmed';
       });
 

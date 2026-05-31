@@ -1,11 +1,11 @@
 /**
  * 18: 状態スコープ付き型安全イベント送信（case/when）
  *
- * actor.in('idle').tap(idle => idle.send(...)) で、現在の状態にマッチしたときだけ
+ * actor.in('idle', idle => idle.send(...)) で、現在の状態にマッチしたときだけ
  * 実行し、その状態で有効なイベントだけを型安全に送れる。
  *
- * - .in().tap().in().tap() で case/when（兄弟）
- * - .in().in() で子状態へ潜る
+ * - .in(name, cb).in(name, cb) で case/when（同一階層・横）
+ * - .within(name, cb) で複合状態の子へ潜る（cb を抜けるとトップに戻る）
  * - .otherwise() で default
  * - scope.send はその状態で無効なイベントをコンパイルエラーにする
  */
@@ -72,12 +72,10 @@ describe('18: State-scoped type-safe send (case/when)', () => {
     const { snapshot, in: $in } = run(() => injectActor(trafficMachine));
 
     // red の時だけ GO が走る
-    $in('red')
-      .tap((red) => {
-        red.send({ type: 'GO' });
-      })
-      .in('green')
-      .tap((green) => {
+    $in('red', (red) => {
+      red.send({ type: 'GO' });
+    })
+      .in('green', (green) => {
         green.send({ type: 'CAUTION' });
       })
       .otherwise(() => {
@@ -92,12 +90,10 @@ describe('18: State-scoped type-safe send (case/when)', () => {
     send({ type: 'GO' }); // green
 
     let fallback = false;
-    $in('red')
-      .tap(() => {
-        throw new Error('unreachable');
-      })
-      .in('yellow')
-      .tap(() => {
+    $in('red', () => {
+      throw new Error('unreachable');
+    })
+      .in('yellow', () => {
         throw new Error('unreachable');
       })
       .otherwise(() => {
@@ -107,18 +103,38 @@ describe('18: State-scoped type-safe send (case/when)', () => {
     expect(fallback).toBe(true);
   });
 
-  it('descends into nested states with .in().in() and reads payload context', () => {
+  it('descends into nested states with .within() and reads payload context', () => {
     const { snapshot, send, actorRef } = run(() => injectActor(sessionMachine));
     send({ type: 'LOGIN', user: 'alice' }); // auth.active
 
-    matchActor(actorRef)
-      .in('auth')
-      .in('active')
-      .tap((active) => {
+    matchActor(actorRef).within('auth', (s) =>
+      s.in('active', (active) => {
         active.send({ type: 'IDLE' });
-      });
+        expect(active.context.user).toBe('alice');
+      }),
+    );
 
     expect(snapshot().value).toEqual({ auth: 'idle' });
     expect(snapshot().context.user).toBe('alice');
+  });
+
+  it('re-ascends to a top-level branch after a within block', () => {
+    const { snapshot, in: $in } = run(() => injectActor(sessionMachine)); // anon
+
+    let anonRan = false;
+    $in('anon', (anon) => {
+      anon.send({ type: 'LOGIN', user: 'bob' });
+    })
+      .within('auth', (s) =>
+        s.in('active', () => {
+          throw new Error('unreachable — chain captured the anon snapshot');
+        }),
+      )
+      .in('anon', () => {
+        anonRan = true; // within を抜けてトップ階層へ戻れている
+      });
+
+    expect(anonRan).toBe(true);
+    expect(snapshot().value).toEqual({ auth: 'active' });
   });
 });
