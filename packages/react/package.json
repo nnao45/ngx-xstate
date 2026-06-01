@@ -1,0 +1,50 @@
+{
+  "name": "@zstate/react",
+  "version": "0.1.0",
+  "description": "React bindings for XState v5 with Zod, built on useSyncExternalStore. The React equivalent of @xstate/react with Zod-typed events and state-scoped dispatch.",
+  "keywords": ["react", "xstate", "state-machine", "hooks", "zod"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --project tsconfig.json --noEmit && tsc --project tsconfig.spec.json --noEmit"
+  },
+  "dependencies": {
+    "@zstate/core": "workspace:^",
+    "use-sync-external-store": "^1.4.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "xstate": ">=5.0.0",
+    "zod": ">=3.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/use-sync-external-store": "^0.0.6",
+    "jsdom": "^25.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.3.0"
+  }
+}

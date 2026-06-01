@@ -34,15 +34,26 @@
   },
   "overrides": [
     {
-      "files": ["**/*.spec.ts", "**/examples/**/*.ts"],
+      "files": [
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/examples/**/*.ts",
+        "**/examples/**/*.tsx",
+        "**/test-setup.ts"
+      ],
       "rules": {
         "import/no-default-export": "off",
+        "import/no-unassigned-import": "off",
         "max-classes-per-file": "off",
         "max-lines-per-function": "off",
         "max-lines": "off",
         "typescript/no-unsafe-return": "off",
         "typescript/no-unsafe-member-access": "off",
-        "typescript/no-unsafe-argument": "off"
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-confusing-void-expression": "off",
+        "typescript/strict-void-return": "off",
+        "typescript/no-unnecessary-type-conversion": "off",
+        "unicorn/consistent-function-scoping": "off"
       }
     }
   ]
