@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["**/*.config.ts", "**/dist/**", "**/out-tsc/**", "**/coverage/**"],
   "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
   "categories": {
     "correctness": "error",
@@ -33,7 +34,7 @@
   },
   "overrides": [
     {
-      "files": ["**/*.spec.ts", "examples/**/*.ts"],
+      "files": ["**/*.spec.ts", "**/examples/**/*.ts"],
       "rules": {
         "import/no-default-export": "off",
         "max-classes-per-file": "off",
