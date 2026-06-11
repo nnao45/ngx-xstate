@@ -88,10 +88,33 @@ export interface StateScope<TNode extends StateNodeShape, TEvent, TContext, TNam
   readonly value: TName;
 }
 
-/** fold に渡す cases オブジェクトの型 */
-type FoldCases<TTree extends StateTree, TEvent, TContext, T> = {
+/** fold / collect / foldMap に渡す cases オブジェクトの型 */
+type MatchCases<TTree extends StateTree, TEvent, TContext, T> = {
   [K in keyof TTree & string]?: (scope: StateScope<TTree[K], TEvent, TContext, K>) => T;
 };
+
+/** fold に渡す cases オブジェクトの型（後方互換のため残す） */
+type FoldCases<TTree extends StateTree, TEvent, TContext, T> = MatchCases<
+  TTree,
+  TEvent,
+  TContext,
+  T
+>;
+
+/**
+ * foldMap に渡すモノイド。
+ * - `empty` : 単位元（何もマッチしなかった時の戻り値）
+ * - `combine`: 二項演算（左結合で畳み込む）
+ */
+export interface Monoid<M> {
+  readonly empty: M;
+  readonly combine: (a: M, b: M) => M;
+}
+
+/** pipe の各ステップ: Matcher を受け取り Matcher か最終値を返す関数 */
+type MatcherTransform<TTree extends StateTree, TEvent, TContext> = (
+  m: Matcher<TTree, TEvent, TContext>,
+) => Matcher<TTree, TEvent, TContext>;
 
 /**
  * case/when チェーン。`in` はこの階層の状態を横に分岐し、`within` は複合状態の
@@ -129,7 +152,7 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
     cb: (ctx: TContext) => void,
   ): Matcher<TTree, TEvent, TContext>;
   /**
-   * マシンが終了状態（snapshot.done === true、type: 'final' 到達）のとき cb を実行。
+   * マシンが終了状態（snapshot.status === 'done'、type: 'final' 到達）のとき cb を実行。
    * 状態名ではなく FSM の終了という意味論でマッチする。
    */
   done(cb: (ctx: TContext) => void): Matcher<TTree, TEvent, TContext>;
@@ -140,6 +163,63 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
    */
   fold<T>(cases: FoldCases<TTree, TEvent, TContext, T> & { _: () => T }): T;
   fold<T>(cases: FoldCases<TTree, TEvent, TContext, T>): T | undefined;
+
+  // ── Cats Effect 系メソッド ─────────────────────────────────────────────────
+
+  /**
+   * FlatMap.flatTap: matched フラグを変えずに context への副作用だけを差し込む。
+   * ログ・テレメトリ等で「観測するが otherwise の挙動を変えたくない」場合に使う。
+   * in / when と違い、このメソッドは matched を立てない。
+   */
+  tapAlways(cb: (ctx: TContext) => void): Matcher<TTree, TEvent, TContext>;
+  /**
+   * Functor / ReaderT.local: context を変換した新しい Matcher を返す。
+   * 後続の in / fold / when は変換後の context 型 U を受け取る。
+   * matched フラグは元の Matcher と共有するため otherwise への影響はそのまま引き継がれる。
+   */
+  mapContext<U>(fn: (ctx: TContext) => U): Matcher<TTree, TEvent, U>;
+  /**
+   * Foldable.toList: 現在の階層で一致した全ケースの戻り値を配列で返す。
+   * 並列状態（type: 'parallel'）では複数要素が返る。fold は最初の一致で終了するが
+   * collect はすべての一致を収集する。
+   */
+  collect<T>(cases: MatchCases<TTree, TEvent, TContext, T>): T[];
+  /**
+   * Foldable.foldMap: 一致した全ケースの戻り値をモノイドで畳み込む。
+   * collect は Array モノイドの特殊ケース。
+   * 並列状態で複数一致した場合 monoid.combine を左結合で適用する。
+   * 何も一致しなければ monoid.empty を返す。
+   */
+  foldMap<M>(
+    monoid: Monoid<M>,
+    cases: MatchCases<TTree, TEvent, TContext, M>,
+  ): M;
+  /**
+   * Kleisli 合成 / Reader 変換: Matcher を受け取る変換関数を順に適用する。
+   * 再利用可能な「状態ビヘイビア」関数を合成して Matcher に適用できる。
+   *
+   * @example
+   * const withSpinner = (m: Matcher<...>) => m.inAny(['loading', 'fetching'], () => show())
+   * const withError   = (m: Matcher<...>) => m.in('error', s => toast(s.context.msg))
+   * matchActor(actor).pipe(withSpinner, withError).otherwise(() => hide())
+   */
+  pipe<A>(fn1: (m: Matcher<TTree, TEvent, TContext>) => A): A;
+  pipe<A>(
+    fn1: MatcherTransform<TTree, TEvent, TContext>,
+    fn2: (m: Matcher<TTree, TEvent, TContext>) => A,
+  ): A;
+  pipe<A>(
+    fn1: MatcherTransform<TTree, TEvent, TContext>,
+    fn2: MatcherTransform<TTree, TEvent, TContext>,
+    fn3: (m: Matcher<TTree, TEvent, TContext>) => A,
+  ): A;
+  pipe<A>(
+    fn1: MatcherTransform<TTree, TEvent, TContext>,
+    fn2: MatcherTransform<TTree, TEvent, TContext>,
+    fn3: MatcherTransform<TTree, TEvent, TContext>,
+    fn4: (m: Matcher<TTree, TEvent, TContext>) => A,
+  ): A;
+
   /** どの分岐にも一致しなかった時に実行（default） */
   otherwise(cb: () => void): void;
 }
@@ -176,7 +256,7 @@ function makeMatcher(
   matched: MatchedRef,
   isDone: boolean,
 ): Matcher<StateTree, unknown, unknown> {
-  // fold だけは overload 対応のため関数を先に定義してキャストする
+  // generic / overload メソッドは関数を先に定義してキャストする（contextual typing が壊れるのを防ぐ）
   const foldImpl = (
     cases: Record<string, ((scope: unknown) => unknown) | undefined>,
   ): unknown => {
@@ -189,6 +269,36 @@ function makeMatcher(
     const fallback = cases['_'];
     return typeof fallback === 'function' ? fallback(undefined) : undefined;
   };
+
+  const collectImpl = (
+    cases: Record<string, ((scope: unknown) => unknown) | undefined>,
+  ): unknown[] => {
+    const results: unknown[] = [];
+    for (const [key, fn] of Object.entries(cases)) {
+      if (typeof fn !== 'function') continue;
+      if (pathMatches(value, [...parentPath, key])) {
+        results.push(fn({ send, context, value: key }));
+      }
+    }
+    return results;
+  };
+
+  const foldMapImpl = (
+    monoid: { empty: unknown; combine: (a: unknown, b: unknown) => unknown },
+    cases: Record<string, ((scope: unknown) => unknown) | undefined>,
+  ): unknown => {
+    let acc = monoid.empty;
+    for (const [key, fn] of Object.entries(cases)) {
+      if (typeof fn !== 'function') continue;
+      if (pathMatches(value, [...parentPath, key])) {
+        acc = monoid.combine(acc, fn({ send, context, value: key }));
+      }
+    }
+    return acc;
+  };
+
+  const pipeImpl = (...fns: Array<(m: unknown) => unknown>): unknown =>
+    fns.reduce((acc, fn) => fn(acc), self as unknown);
 
   const self: Matcher<StateTree, unknown, unknown> = {
     in(name, cb) {
@@ -239,6 +349,18 @@ function makeMatcher(
       return self;
     },
     fold: foldImpl as never,
+    tapAlways(cb) {
+      cb(context);
+      return self;
+    },
+    mapContext(fn) {
+      const newCtx = (fn as (ctx: unknown) => unknown)(context);
+      // matched を共有することで元のチェーンの otherwise に影響が伝わる
+      return makeMatcher(parentPath, value, send, newCtx, matched, isDone) as never;
+    },
+    collect: collectImpl as never,
+    foldMap: foldMapImpl as never,
+    pipe: pipeImpl as never,
     otherwise(cb) {
       if (!matched.matched) cb();
     },
@@ -256,7 +378,7 @@ export type StateMatcherFor<TLogic extends AnyActorLogic> = Matcher<
 /**
  * 現在状態値・send・context から case/when マッチャを構築する（内部用・loose型）。
  * injectActor の `.in()` は検証付き send を渡してこれを使う。
- * isDone は snapshot.done をそのまま渡す（省略時 false）。
+ * isDone は snapshot.status === 'done' をそのまま渡す（省略時 false）。
  */
 export function buildStateMatcher(
   value: StateValue,
@@ -270,23 +392,20 @@ export function buildStateMatcher(
 /**
  * actor の現在状態に対する型安全な case/when マッチャを作る。
  *
- * `.in(name, scope => ...)` はその状態のときだけ cb を実行し、`scope.send` はその状態で
- * 有効なイベントだけを受け付ける。`.within(name, child => ...)` で複合状態の子へ潜り、
- * コールバックを抜けると外側（同じ階層）に戻るので別のトップ状態を続けて分岐できる。
+ * 副作用メソッド（matched フラグに影響）:
+ *   `.in` `.within` `.inAny` `.when` `.done`  → 一致すれば `.otherwise` を抑制
  *
- * 新規メソッド:
- * - `.inAny(names, cb)` — 複数状態の OR マッチ
- * - `.when(guard, cb)` — コンテキスト述語マッチ
- * - `.done(cb)` — 終了状態マッチ（snapshot.done === true）
- * - `.fold(cases)` — 値を返す網羅的パターンマッチ
+ * 観測専用（matched フラグに影響しない）:
+ *   `.tapAlways`  → 常に副作用、otherwise に影響なし
  *
- * @example
- * matchActor(actorRef)
- *   .in('idle', idle => idle.send({ type: 'FETCH' }))
- *   .in('loading', l => l.send({ type: 'CANCEL' }))
- *   .within('loggedIn', s => s
- *     .in('active', a => a.send({ type: 'GO_IDLE' })))
- *   .otherwise(() => {});
+ * 変換メソッド（新しい Matcher を返す）:
+ *   `.mapContext`  → context を変換（Functor / ReaderT.local）
+ *   `.pipe`        → 変換関数を合成（Kleisli）
+ *
+ * 値抽出メソッド（終端操作）:
+ *   `.fold`        → 最初の一致から T を返す
+ *   `.collect`     → 全一致を T[] で返す（並列状態対応）
+ *   `.foldMap`     → 全一致をモノイドで畳み込む（collect の一般化）
  *
  * @example
  * const label = matchActor(actorRef).fold({
@@ -295,6 +414,11 @@ export function buildStateMatcher(
  *   success: () => 'Done',
  *   _:       () => 'Unknown',
  * });
+ *
+ * @example
+ * const withSpinner = (m: typeof matcher) =>
+ *   m.inAny(['loading', 'fetching'], () => showSpinner())
+ * matchActor(actorRef).pipe(withSpinner).otherwise(() => hideSpinner())
  */
 export function matchActor<TLogic extends AnyActorLogic>(
   actor: Actor<TLogic>,

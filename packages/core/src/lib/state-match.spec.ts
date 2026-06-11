@@ -853,4 +853,535 @@ describe('matchActor', () => {
       expect(childResult).toBeUndefined();
     });
   });
+
+  // ─── tapAlways ─────────────────────────────────────────────────────────────
+
+  describe('tapAlways — FlatMap.flatTap: side-effect without touching matched', () => {
+    it('always runs the callback regardless of state', () => {
+      const actor = start(fetchMachine); // idle
+
+      const calls: string[] = [];
+      matchActor(actor)
+        .tapAlways(() => calls.push('tap'))
+        .in('loading', () => calls.push('loading')); // 不一致
+
+      expect(calls).toEqual(['tap']);
+    });
+
+    it('runs before other branches in chain order', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const order: string[] = [];
+      matchActor(actor)
+        .tapAlways(() => order.push('tap'))
+        .in('loading', () => order.push('in'));
+
+      expect(order).toEqual(['tap', 'in']);
+    });
+
+    it('receives context', () => {
+      const actor = start(fetchMachine); // retries: 0
+
+      let seen = -1;
+      matchActor(actor).tapAlways((ctx) => {
+        seen = ctx.retries;
+      });
+
+      expect(seen).toBe(0);
+    });
+
+    it('does NOT set matched — otherwise still runs when no in() matched', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .tapAlways(() => {})  // 常に実行
+        .in('idle', () => {}) // 不一致
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      // tapAlways だけでは matched にならないため otherwise が発火する
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('does NOT suppress otherwise even when tapAlways ran', () => {
+      const actor = start(fetchMachine); // idle
+
+      let tapRan = false;
+      let otherwiseRan = false;
+      matchActor(actor)
+        .tapAlways(() => {
+          tapRan = true;
+        })
+        .in('loading', () => {}) // 不一致
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(tapRan).toBe(true);
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('is chainable — returns Matcher for further branching', () => {
+      const actor = start(fetchMachine); // idle
+
+      let inRan = false;
+      matchActor(actor)
+        .tapAlways(() => {})
+        .in('idle', () => {
+          inRan = true;
+        });
+
+      expect(inRan).toBe(true);
+    });
+  });
+
+  // ─── mapContext ─────────────────────────────────────────────────────────────
+
+  describe('mapContext — Functor / ReaderT.local: transform context for downstream', () => {
+    it('transforms context visible to subsequent in() callbacks', () => {
+      const actor = start(fetchMachine); // idle, retries: 0
+
+      let seen = '';
+      matchActor(actor)
+        .mapContext((ctx) => ({ ...ctx, label: `retry:${ctx.retries}` }))
+        .in('idle', (s) => {
+          seen = s.context.label;
+        });
+
+      expect(seen).toBe('retry:0');
+    });
+
+    it('original context is unchanged for branches before mapContext', () => {
+      const actor = start(fetchMachine);
+
+      let beforeCtx: { retries: number } | null = null;
+      let afterCtx: { retries: number; label: string } | null = null;
+
+      matchActor(actor)
+        .in('idle', (s) => {
+          beforeCtx = { retries: s.context.retries };
+        })
+        .mapContext((ctx) => ({ ...ctx, label: 'added' }))
+        .in('idle', (s) => {
+          afterCtx = { retries: s.context.retries, label: s.context.label };
+        });
+
+      expect(beforeCtx).toEqual({ retries: 0 });
+      expect(afterCtx).toEqual({ retries: 0, label: 'added' });
+    });
+
+    it('shares matched ref — in() on mapped matcher suppresses otherwise', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .mapContext((ctx) => ctx)
+        .in('idle', () => {})
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(false);
+    });
+
+    it('shares matched ref — otherwise fires if mapped in() did not match', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .mapContext((ctx) => ctx)
+        .in('loading', () => {}) // 不一致
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('can transform context type entirely (different shape)', () => {
+      const actor = start(fetchMachine);
+
+      let seen = -1;
+      matchActor(actor)
+        .mapContext((ctx) => ctx.retries * 10) // { retries: number } → number
+        .in('idle', (s) => {
+          seen = s.context; // number になっている
+        });
+
+      expect(seen).toBe(0);
+    });
+
+    it('can chain multiple mapContext calls', () => {
+      const actor = start(fetchMachine);
+
+      let seen = '';
+      matchActor(actor)
+        .mapContext((ctx) => ({ ...ctx, step: 1 }))
+        .mapContext((ctx) => ({ ...ctx, step: ctx.step + 1 }))
+        .in('idle', (s) => {
+          seen = String(s.context.step);
+        });
+
+      expect(seen).toBe('2');
+    });
+  });
+
+  // ─── collect ───────────────────────────────────────────────────────────────
+
+  describe('collect — Foldable.toList: gather all matching values into an array', () => {
+    it('returns single-element array when one case matches', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).collect({
+        idle: () => 'ready',
+        loading: () => 'busy',
+      });
+
+      expect(result).toEqual(['ready']);
+    });
+
+    it('returns empty array when no case matches', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const result = matchActor(actor).collect({
+        idle: () => 'ready',
+        success: () => 'done',
+      });
+
+      expect(result).toEqual([]);
+    });
+
+    it('passes scope with context and value to each handler', () => {
+      const actor = start(fetchMachine); // idle, retries: 0
+
+      const result = matchActor(actor).collect({
+        idle: (s) => `${s.value}:${s.context.retries}`,
+      });
+
+      expect(result).toEqual(['idle:0']);
+    });
+
+    it('collects MULTIPLE matches for parallel (compound) states', () => {
+      // XState parallel state: { audio: 'on', display: 'windowed' } at root
+      const parallelMachine = setup({
+        types: {} as {
+          events:
+            | { type: 'MUTE' }
+            | { type: 'UNMUTE' }
+            | { type: 'FULLSCREEN' }
+            | { type: 'EXIT_FULLSCREEN' };
+        },
+      }).createMachine({
+        id: 'player',
+        type: 'parallel',
+        states: {
+          audio: {
+            initial: 'on',
+            states: {
+              on: { on: { MUTE: 'off' } },
+              off: { on: { UNMUTE: 'on' } },
+            },
+          },
+          display: {
+            initial: 'windowed',
+            states: {
+              windowed: { on: { FULLSCREEN: 'fullscreen' } },
+              fullscreen: { on: { EXIT_FULLSCREEN: 'windowed' } },
+            },
+          },
+        },
+      });
+
+      const actor = start(parallelMachine);
+      // state = { audio: 'on', display: 'windowed' } — 並列で両方アクティブ
+
+      const result = matchActor(actor).collect({
+        audio: (s) => `audio:${s.value}`,
+        display: (s) => `display:${s.value}`,
+      });
+
+      // 両サブマシンが同時にアクティブ → 両ケースを収集
+      expect(result).toEqual(['audio:audio', 'display:display']);
+    });
+
+    it('only collects cases that match — non-matching keys are skipped', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).collect({
+        idle: () => 'idle',
+        loading: () => 'loading',
+        success: () => 'success',
+      });
+
+      expect(result).toEqual(['idle']); // idle だけ一致
+    });
+
+    it('does not affect matched flag (does not suppress otherwise)', () => {
+      // collect は値抽出専用。matched を変えないので otherwise への影響なし
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .in('idle', () => {}) // 不一致
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      // collect だけでは matched は立たない（in/when/inAny が必要）
+      matchActor(actor).collect({ loading: () => 1 }); // collect は matched に影響しない
+
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('works inside within() for nested state collection', () => {
+      const actor = start(authMachine);
+      actor.send({ type: 'LOGIN' }); // loggedIn.active
+
+      let result: string[] = [];
+      matchActor(actor).within('loggedIn', (child) => {
+        result = child.collect({
+          active: (s) => `active:${s.value}`,
+          away: (s) => `away:${s.value}`,
+        });
+      });
+
+      expect(result).toEqual(['active:active']);
+    });
+  });
+
+  // ─── foldMap ───────────────────────────────────────────────────────────────
+
+  describe('foldMap — Foldable.foldMap: fold all matches with a Monoid', () => {
+    it('returns the combined value when one case matches', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).foldMap(
+        { empty: '', combine: (a, b) => (a ? `${a} | ${b}` : b) },
+        {
+          idle: () => 'idle',
+          loading: () => 'loading',
+        },
+      );
+
+      expect(result).toBe('idle');
+    });
+
+    it('returns monoid.empty when no case matches', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const result = matchActor(actor).foldMap(
+        { empty: 'EMPTY', combine: (a, b) => `${a}+${b}` },
+        { idle: () => 'idle', success: () => 'success' },
+      );
+
+      expect(result).toBe('EMPTY');
+    });
+
+    it('combines multiple matches with monoid.combine (parallel states)', () => {
+      const parallelMachine = setup({
+        types: {} as {
+          events: { type: 'MUTE' } | { type: 'FULLSCREEN' };
+        },
+      }).createMachine({
+        id: 'player2',
+        type: 'parallel',
+        states: {
+          audio: {
+            initial: 'on',
+            states: { on: { on: { MUTE: 'off' } }, off: {} },
+          },
+          display: {
+            initial: 'windowed',
+            states: { windowed: { on: { FULLSCREEN: 'fullscreen' } }, fullscreen: {} },
+          },
+        },
+      });
+
+      const actor = start(parallelMachine);
+      // { audio: 'on', display: 'windowed' }
+
+      const result = matchActor(actor).foldMap(
+        { empty: 0, combine: (a, b) => a + b },
+        {
+          audio: () => 1,
+          display: () => 10,
+        },
+      );
+
+      // 1 + 10 = 11（両サブマシンが一致）
+      expect(result).toBe(11);
+    });
+
+    it('is left-associative: combine(combine(empty, first), second)', () => {
+      const parallelMachine = setup({
+        types: {} as { events: { type: 'X' } },
+      }).createMachine({
+        id: 'acc',
+        type: 'parallel',
+        states: {
+          a: { initial: 'on', states: { on: {} } },
+          b: { initial: 'on', states: { on: {} } },
+          c: { initial: 'on', states: { on: {} } },
+        },
+      });
+
+      const actor = start(parallelMachine);
+      const calls: string[] = [];
+
+      matchActor(actor).foldMap(
+        {
+          empty: 'E',
+          combine: (a, b) => {
+            calls.push(`combine(${a},${b})`);
+            return `(${a}+${b})`;
+          },
+        },
+        {
+          a: () => 'A',
+          b: () => 'B',
+          c: () => 'C',
+        },
+      );
+
+      // E→A, (E+A)→B, ((E+A)+B)→C の左結合
+      expect(calls).toEqual(['combine(E,A)', 'combine((E+A),B)', 'combine(((E+A)+B),C)']);
+    });
+
+    it('works as a string-concatenation monoid (practical use case)', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).foldMap(
+        { empty: [] as string[], combine: (a, b) => [...a, b] },
+        {
+          idle: () => 'idle-active',
+          loading: () => 'loading-active',
+          success: () => 'success-active',
+        },
+      );
+
+      expect(result).toEqual(['idle-active']);
+    });
+
+    it('works inside within() for nested state aggregation', () => {
+      const actor = start(authMachine);
+      actor.send({ type: 'LOGIN' }); // loggedIn.active
+
+      let result = '';
+      matchActor(actor).within('loggedIn', (child) => {
+        // 文字列連結モノイド: empty='' で始まり、combine は空文字を無視して連結
+        result = child.foldMap(
+          { empty: '', combine: (a, b) => (a ? `${a},${b}` : b) },
+          {
+            active: () => 'active',
+            away: () => 'away',
+          },
+        );
+      });
+
+      // active だけ一致 → '' を空文字として combine → 'active'
+      expect(result).toBe('active');
+    });
+  });
+
+  // ─── pipe ──────────────────────────────────────────────────────────────────
+
+  describe('pipe — Kleisli composition: thread Matcher through transform functions', () => {
+    it('applies a single transform function', () => {
+      const actor = start(fetchMachine); // idle
+
+      let ran = false;
+      matchActor(actor).pipe((m) =>
+        m.in('idle', () => {
+          ran = true;
+        }),
+      );
+
+      expect(ran).toBe(true);
+    });
+
+    it('chains two transforms in order', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const order: string[] = [];
+      matchActor(actor).pipe(
+        (m) => m.tapAlways(() => order.push('tap')),
+        (m) =>
+          m.in('loading', () => {
+            order.push('loading');
+          }),
+      );
+
+      expect(order).toEqual(['tap', 'loading']);
+    });
+
+    it('applies three transforms maintaining matched state', () => {
+      const actor = start(fetchMachine); // idle
+
+      let idleRan = false;
+      let otherwiseRan = false;
+      matchActor(actor)
+        .pipe(
+          (m) => m.tapAlways(() => {}),
+          (m) => m.tapAlways(() => {}),
+          (m) => m.in('idle', () => { idleRan = true; }),
+        )
+        .otherwise(() => { otherwiseRan = true; });
+
+      expect(idleRan).toBe(true);
+      expect(otherwiseRan).toBe(false);
+    });
+
+    it('can compose reusable behavior modules (Kleisli pattern)', () => {
+      type M = typeof matchActor<typeof fetchMachine>;
+      const withLoadingLog = (m: ReturnType<M>) =>
+        m.inAny(['loading', 'success'], () => loadingCalls.push('seen'));
+      const withIdleReset = (m: ReturnType<M>) =>
+        m.in('idle', () => idleCalls.push('idle'));
+
+      const loadingCalls: string[] = [];
+      const idleCalls: string[] = [];
+
+      const actor = start(fetchMachine); // idle
+      matchActor(actor).pipe(withLoadingLog, withIdleReset);
+
+      expect(loadingCalls).toEqual([]); // idle なので loading は発火しない
+      expect(idleCalls).toEqual(['idle']);
+    });
+
+    it('pipe terminal: last function can return a non-Matcher value', () => {
+      const actor = start(fetchMachine); // idle
+
+      const label = matchActor(actor).pipe((m) =>
+        m.fold({
+          idle: () => 'ready',
+          loading: () => 'busy',
+          _: () => 'unknown',
+        }),
+      );
+
+      expect(label).toBe('ready');
+    });
+
+    it('pipe with 4 transforms applies all in order', () => {
+      const actor = start(fetchMachine);
+
+      const steps: number[] = [];
+      matchActor(actor).pipe(
+        (m) => { steps.push(1); return m; },
+        (m) => { steps.push(2); return m; },
+        (m) => { steps.push(3); return m; },
+        (m) => { steps.push(4); return m; },
+      );
+
+      expect(steps).toEqual([1, 2, 3, 4]);
+    });
+  });
 });
