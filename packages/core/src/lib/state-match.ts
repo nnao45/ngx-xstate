@@ -106,7 +106,7 @@ type FoldCases<TTree extends StateTree, TEvent, TContext, T> = {
  * 子へスコープ付きで潜る（コールバックを抜けると外側＝この階層に戻る）。
  *
  * Cats Effect 系モナディックメソッド（collect / pipe / tapAlways / mapContext /
- * foldMap / orElse / withFilter / attempt / zip / flatMap）も実装済み。
+ * foldMap / orElse / filter / attempt / zip / flatMap）も実装済み。
  */
 export interface Matcher<TTree extends StateTree, TEvent, TContext> {
   /** この階層の状態 name に現在一致していれば cb を実行。同じ階層の Matcher を返す */
@@ -212,9 +212,9 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
   /**
    * FunctorFilter.filter — 後続チェーン全体への前提条件ゲート。
    * pred が false のとき、以降の in/when/fold/otherwise をすべてスキップする。
-   * when が「1ブランチを追加」するのに対し、withFilter は「チェーン全体に前提を課す」。
+   * when が「1ブランチを追加」するのに対し、filter は「チェーン全体に前提を課す」。
    */
-  withFilter(pred: (ctx: TContext) => boolean): Matcher<TTree, TEvent, TContext>;
+  filter(pred: (ctx: TContext) => boolean): Matcher<TTree, TEvent, TContext>;
 
   /**
    * IO.attempt / ApplicativeError.attempt — ケースハンドラーの例外を型安全に捕捉する。
@@ -279,7 +279,7 @@ function pathMatches(value: StateValue, path: readonly string[]): boolean {
 }
 
 /**
- * withFilter(false) が返す dead Matcher。
+ * filter(false) が返す dead Matcher。
  * すべてのメソッドが no-op になり、otherwise も抑制される。
  */
 function makeDeadMatcher(): Matcher<StateTree, unknown, unknown> {
@@ -299,7 +299,7 @@ function makeDeadMatcher(): Matcher<StateTree, unknown, unknown> {
     mapContext: () => dead as never,
     foldMap: ((monoid: Monoid<unknown>) => monoid.empty) as never,
     orElse: () => dead,
-    withFilter: () => dead,
+    filter: () => dead,
     attempt: () => ({ ok: true as const, value: undefined }),
     zip: () => [undefined, undefined] as const as never,
     flatMap: () => dead,
@@ -463,7 +463,7 @@ function makeMatcher(
       return self;
     },
 
-    withFilter(pred) {
+    filter(pred) {
       if (!(pred as (ctx: unknown) => boolean)(context)) {
         return makeDeadMatcher();
       }
@@ -524,7 +524,7 @@ export function buildStateMatcher(
  * - `.mapContext(fn)` — Functor.map: context 型を変換
  * - `.foldMap(monoid, cases)` — Foldable.foldMap: モノイドで全一致を集約
  * - `.orElse(factory)` — Alternative.orElse: 未マッチ時に別 Matcher へフォールバック
- * - `.withFilter(pred)` — FunctorFilter.filter: チェーン全体への前提条件ゲート
+ * - `.filter(pred)` — FunctorFilter.filter: チェーン全体への前提条件ゲート
  * - `.attempt(cases)` — IO.attempt: ハンドラ例外を { ok, value/error } に捕捉
  * - `.zip(casesA, casesB)` — Apply.product: 2 つの fold を同時評価してタプルで返す
  * - `.flatMap(fn)` — FlatMap.flatMap: context から Matcher を動的生成して接続

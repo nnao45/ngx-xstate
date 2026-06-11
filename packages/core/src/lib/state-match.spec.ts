@@ -1173,15 +1173,15 @@ describe('matchActor', () => {
     });
   });
 
-  // ─── withFilter ─────────────────────────────────────────────────────────────
+  // ─── filter ─────────────────────────────────────────────────────────────
 
-  describe('withFilter — FunctorFilter.filter: チェーン全体への前提条件ゲート', () => {
+  describe('filter — FunctorFilter.filter: チェーン全体への前提条件ゲート', () => {
     it('pred が true なら後続の in が正常に動く', () => {
       const actor = start(fetchMachine); // idle
 
       let ran = false;
       matchActor(actor)
-        .withFilter(() => true)
+        .filter(() => true)
         .in('idle', () => {
           ran = true;
         });
@@ -1194,7 +1194,7 @@ describe('matchActor', () => {
 
       let ran = false;
       matchActor(actor)
-        .withFilter(() => false)
+        .filter(() => false)
         .in('idle', () => {
           ran = true;
         });
@@ -1207,7 +1207,7 @@ describe('matchActor', () => {
 
       let otherwiseRan = false;
       matchActor(actor)
-        .withFilter(() => false)
+        .filter(() => false)
         .in('loading', () => {})
         .otherwise(() => {
           otherwiseRan = true;
@@ -1221,7 +1221,7 @@ describe('matchActor', () => {
 
       let otherwiseRan = false;
       matchActor(actor)
-        .withFilter(() => true)
+        .filter(() => true)
         .in('loading', () => {}) // マッチしない
         .otherwise(() => {
           otherwiseRan = true;
@@ -1235,7 +1235,7 @@ describe('matchActor', () => {
 
       let ran = false;
       matchActor(actor)
-        .withFilter((ctx) => ctx.retries === 0)
+        .filter((ctx) => ctx.retries === 0)
         .in('idle', () => {
           ran = true;
         });
@@ -1247,7 +1247,7 @@ describe('matchActor', () => {
       const actor = start(fetchMachine); // idle
 
       const result = matchActor(actor)
-        .withFilter(() => false)
+        .filter(() => false)
         .fold({ idle: () => 'ready', _: () => 'fallback' });
 
       expect(result).toBeUndefined();
