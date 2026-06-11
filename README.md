@@ -34,7 +34,7 @@ const { snapshot, send } = useActor(counter);
 send({ type: 'ADD', by: 5 }); // ✅ payload type-checked, useSyncExternalStore
 ```
 
-`matchActor` also provides Cats Effect–style monadic methods: `.fold()`, `.zip()`, `.attempt()`, `.filter()`, `.orElse()`, `.map()`, `.tapAlways()`, `.collect()`, `.foldMap()`, `.pipe()`, `.flatMap()`. See [`@zstate/core`](./packages/core) for details.
+`matchActor` provides pattern-matching composition methods: `.fold()`, `.zip()`, `.attempt()`, `.filter()`, `.orElse()`, `.map()`, `.tapAlways()`, `.collect()`, `.foldMap()`, `.pipe()`, `.fallbackWith()`. See [`@zstate/core`](./packages/core) for details.
 
 ---
 

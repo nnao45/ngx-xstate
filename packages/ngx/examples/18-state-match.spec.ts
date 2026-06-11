@@ -139,7 +139,7 @@ describe('18: State-scoped type-safe send (case/when)', () => {
   });
 });
 
-// ─── reportMachine: fold / map / tapAlways / foldMap / flatMap / attempt テスト用 ───
+// ─── reportMachine: fold / map / tapAlways / foldMap / fallbackWith / attempt テスト用 ───
 
 const reportMachine = typedSetup({
   context: z.object({
@@ -304,7 +304,7 @@ describe('foldMap — Foldable.foldMap: モノイドで集約', () => {
   });
 });
 
-describe('flatMap — FlatMap.flatMap: context から Matcher を動的選択', () => {
+describe('fallbackWith — 未マッチ時に context から Matcher を動的選択', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   });
@@ -343,7 +343,7 @@ describe('flatMap — FlatMap.flatMap: context から Matcher を動的選択', 
     const { actorRef } = run(() => injectActor(adminReportMachine));
 
     const paths: string[] = [];
-    matchActor(actorRef).flatMap((ctx) => {
+    matchActor(actorRef).fallbackWith((ctx) => {
       if (ctx.role === 'admin') {
         return matchActor(actorRef).in('idle', () => paths.push('admin'));
       }
@@ -357,7 +357,7 @@ describe('flatMap — FlatMap.flatMap: context から Matcher を動的選択', 
     const { actorRef } = run(() => injectActor(reportMachine)); // role: 'user'
 
     const paths: string[] = [];
-    matchActor(actorRef).flatMap((ctx) => {
+    matchActor(actorRef).fallbackWith((ctx) => {
       if (ctx.role === 'admin') {
         return matchActor(actorRef).in('idle', () => paths.push('admin'));
       }
