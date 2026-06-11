@@ -1,9 +1,13 @@
 import type { Actor, AnyActorLogic, InspectionEvent, SnapshotFrom } from 'xstate';
 import type { ReactElement, ReactNode } from 'react';
-import type { SendEvent, StateMatcherFor } from '@zstate/core';
+import type { InputFrom, SendEvent, StateMatcherFor } from '@zstate/core';
 
 export interface UseActorOptions<TLogic extends AnyActorLogic> {
-  readonly input?: Parameters<Actor<TLogic>['send']> extends never ? never : unknown;
+  /**
+   * actor に渡す input 値。
+   * 型は machine の `typedSetup({ input: z.object({...}) })` から自動推論される。
+   */
+  readonly input?: InputFrom<TLogic>;
   readonly inspect?: (event: InspectionEvent) => void;
   readonly id?: string;
   readonly systemId?: string;

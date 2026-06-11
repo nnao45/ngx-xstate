@@ -1,10 +1,18 @@
 import type { Actor, AnyActorLogic, SnapshotFrom } from 'xstate';
 import type { InspectionEvent } from 'xstate';
 import type { Signal, FactoryProvider } from '@angular/core';
-import type { SendEvent, StateMatcherFor } from '@zstate/core';
+import type { InputFrom, SendEvent, StateMatcherFor } from '@zstate/core';
 
 export interface InjectActorOptions<TLogic extends AnyActorLogic> {
-  readonly input?: Parameters<Actor<TLogic>['send']> extends never ? never : unknown;
+  /**
+   * actor に渡す input 値。
+   * - 静的値: `input: { userId: 'alice' }`
+   * - Angular Signal / computed を読む factory 関数: `input: () => this.userId()`
+   *   (関数の場合は Signal 変化を追跡し、変化のたびに actor を作り直す)
+   *
+   * 型は machine の `typedSetup({ input: z.object({...}) })` から自動推論される。
+   */
+  readonly input?: InputFrom<TLogic> | (() => InputFrom<TLogic>);
   readonly inspect?: (event: InspectionEvent) => void;
   readonly id?: string;
   readonly systemId?: string;

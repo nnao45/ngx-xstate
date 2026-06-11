@@ -8,18 +8,16 @@ export function buildActorOptions<TLogic extends AnyActorLogic>(
   options: UseActorOptions<TLogic> | undefined,
   input: unknown,
   globalInspect?: (event: InspectionEvent) => void,
-): Parameters<typeof createActor>[1] {
+): Parameters<typeof createActor<TLogic>>[1] {
   // Per-actor inspect takes precedence over the global devtools inspector.
   const inspect = options?.inspect ?? globalInspect;
   return {
     id: options?.id,
     systemId: options?.systemId,
     inspect,
-    input: input as Parameters<typeof createActor>[1] extends { input?: infer I } ? I : never,
-    snapshot: options?.snapshot as Parameters<typeof createActor>[1] extends { snapshot?: infer S }
-      ? S
-      : never,
-  };
+    input,
+    snapshot: options?.snapshot,
+  } as Parameters<typeof createActor<TLogic>>[1];
 }
 
 function validateInput(input: unknown, schemas: SchemasPayload | undefined): void {
@@ -59,7 +57,7 @@ export function useActorRef<TLogic extends AnyActorLogic>(
     validateInput(params.options?.input, schemas);
     return createActor(
       params.logic,
-      buildActorOptions(params.options, params.options?.input, params.globalInspect),
+      buildActorOptions(params.options, params.options?.input as unknown, params.globalInspect),
     );
   }, []);
 
