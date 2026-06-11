@@ -88,6 +88,11 @@ export interface StateScope<TNode extends StateNodeShape, TEvent, TContext, TNam
   readonly value: TName;
 }
 
+/** fold に渡す cases オブジェクトの型 */
+type FoldCases<TTree extends StateTree, TEvent, TContext, T> = {
+  [K in keyof TTree & string]?: (scope: StateScope<TTree[K], TEvent, TContext, K>) => T;
+};
+
 /**
  * case/when チェーン。`in` はこの階層の状態を横に分岐し、`within` は複合状態の
  * 子へスコープ付きで潜る（コールバックを抜けると外側＝この階層に戻る）。
@@ -105,9 +110,36 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
    */
   within<K extends CompoundKeys<TTree>>(
     name: K,
-    // 戻り値は無視する。`s => s.in(...)` のショートハンドで子 Matcher を返せるよう unknown。
     cb: (child: Matcher<TTree[K]['children'], TEvent, TContext>) => unknown,
   ): Matcher<TTree, TEvent, TContext>;
+  /**
+   * 複数の状態名を OR で照合する。names のいずれか一つに一致したら cb を実行。
+   * 一致した場合は matched フラグを立て、`.otherwise` を抑制する。
+   */
+  inAny<K extends keyof TTree & string>(
+    names: readonly K[],
+    cb: (scope: StateScope<TTree[K], TEvent, TContext, K>) => void,
+  ): Matcher<TTree, TEvent, TContext>;
+  /**
+   * context の述語 guard が true を返すとき cb を実行。
+   * 状態名ではなくコンテキストの値でマッチしたい場合に使う。
+   */
+  when(
+    guard: (ctx: TContext) => boolean,
+    cb: (ctx: TContext) => void,
+  ): Matcher<TTree, TEvent, TContext>;
+  /**
+   * マシンが終了状態（snapshot.done === true、type: 'final' 到達）のとき cb を実行。
+   * 状態名ではなく FSM の終了という意味論でマッチする。
+   */
+  done(cb: (ctx: TContext) => void): Matcher<TTree, TEvent, TContext>;
+  /**
+   * 状態ごとに値を返す写像。現在状態に対応するハンドラを実行して T を返す。
+   * フォールバック _ を渡すと非一致時も T を返すため、戻り値は必ず T になる。
+   * _ なしの場合、非一致なら undefined を返す。
+   */
+  fold<T>(cases: FoldCases<TTree, TEvent, TContext, T> & { _: () => T }): T;
+  fold<T>(cases: FoldCases<TTree, TEvent, TContext, T>): T | undefined;
   /** どの分岐にも一致しなかった時に実行（default） */
   otherwise(cb: () => void): void;
 }
@@ -142,7 +174,22 @@ function makeMatcher(
   send: SendFn,
   context: unknown,
   matched: MatchedRef,
+  isDone: boolean,
 ): Matcher<StateTree, unknown, unknown> {
+  // fold だけは overload 対応のため関数を先に定義してキャストする
+  const foldImpl = (
+    cases: Record<string, ((scope: unknown) => unknown) | undefined>,
+  ): unknown => {
+    for (const [key, fn] of Object.entries(cases)) {
+      if (key === '_' || typeof fn !== 'function') continue;
+      if (pathMatches(value, [...parentPath, key])) {
+        return fn({ send, context, value: key });
+      }
+    }
+    const fallback = cases['_'];
+    return typeof fallback === 'function' ? fallback(undefined) : undefined;
+  };
+
   const self: Matcher<StateTree, unknown, unknown> = {
     in(name, cb) {
       if (pathMatches(value, [...parentPath, name])) {
@@ -155,11 +202,43 @@ function makeMatcher(
       const childPath = [...parentPath, name];
       const parentActive = pathMatches(value, childPath);
       // 親が非アクティブなら子の otherwise を抑制するため matched を true で seed する
-      const child = makeMatcher(childPath, value, send, context, { matched: !parentActive });
+      const child = makeMatcher(
+        childPath,
+        value,
+        send,
+        context,
+        { matched: !parentActive },
+        isDone,
+      );
       cb(child as never);
       if (parentActive) matched.matched = true;
       return self;
     },
+    inAny(names, cb) {
+      for (const name of names) {
+        if (pathMatches(value, [...parentPath, name])) {
+          matched.matched = true;
+          cb({ send, context, value: name } as never);
+          return self;
+        }
+      }
+      return self;
+    },
+    when(guard, cb) {
+      if (guard(context)) {
+        matched.matched = true;
+        cb(context);
+      }
+      return self;
+    },
+    done(cb) {
+      if (isDone) {
+        matched.matched = true;
+        cb(context);
+      }
+      return self;
+    },
+    fold: foldImpl as never,
     otherwise(cb) {
       if (!matched.matched) cb();
     },
@@ -177,13 +256,15 @@ export type StateMatcherFor<TLogic extends AnyActorLogic> = Matcher<
 /**
  * 現在状態値・send・context から case/when マッチャを構築する（内部用・loose型）。
  * injectActor の `.in()` は検証付き send を渡してこれを使う。
+ * isDone は snapshot.done をそのまま渡す（省略時 false）。
  */
 export function buildStateMatcher(
   value: StateValue,
   send: (event: { type: string }) => void,
   context: unknown,
+  isDone = false,
 ): Matcher<StateTree, unknown, unknown> {
-  return makeMatcher([], value, send, context, { matched: false });
+  return makeMatcher([], value, send, context, { matched: false }, isDone);
 }
 
 /**
@@ -193,6 +274,12 @@ export function buildStateMatcher(
  * 有効なイベントだけを受け付ける。`.within(name, child => ...)` で複合状態の子へ潜り、
  * コールバックを抜けると外側（同じ階層）に戻るので別のトップ状態を続けて分岐できる。
  *
+ * 新規メソッド:
+ * - `.inAny(names, cb)` — 複数状態の OR マッチ
+ * - `.when(guard, cb)` — コンテキスト述語マッチ
+ * - `.done(cb)` — 終了状態マッチ（snapshot.done === true）
+ * - `.fold(cases)` — 値を返す網羅的パターンマッチ
+ *
  * @example
  * matchActor(actorRef)
  *   .in('idle', idle => idle.send({ type: 'FETCH' }))
@@ -200,13 +287,30 @@ export function buildStateMatcher(
  *   .within('loggedIn', s => s
  *     .in('active', a => a.send({ type: 'GO_IDLE' })))
  *   .otherwise(() => {});
+ *
+ * @example
+ * const label = matchActor(actorRef).fold({
+ *   idle:    () => 'Ready',
+ *   loading: s  => `Loading (retry ${s.context.retries})`,
+ *   success: () => 'Done',
+ *   _:       () => 'Unknown',
+ * });
  */
 export function matchActor<TLogic extends AnyActorLogic>(
   actor: Actor<TLogic>,
 ): StateMatcherFor<TLogic> {
-  const snapshot = actor.getSnapshot() as { value: StateValue; context: unknown };
+  const snapshot = actor.getSnapshot() as {
+    value: StateValue;
+    context: unknown;
+    status: string;
+  };
   const send: SendFn = (event) => {
     actor.send(event as EventFromLogic<TLogic>);
   };
-  return buildStateMatcher(snapshot.value, send, snapshot.context) as never;
+  return buildStateMatcher(
+    snapshot.value,
+    send,
+    snapshot.context,
+    snapshot.status === 'done',
+  ) as never;
 }
