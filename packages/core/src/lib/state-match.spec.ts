@@ -1202,7 +1202,7 @@ describe('matchActor', () => {
       expect(ran).toBe(false);
     });
 
-    it('pred が false なら otherwise も実行されない', () => {
+    it('pred が false でも otherwise は実行される（filter 前に何もマッチしていない場合）', () => {
       const actor = start(fetchMachine); // idle
 
       let otherwiseRan = false;
@@ -1213,7 +1213,7 @@ describe('matchActor', () => {
           otherwiseRan = true;
         });
 
-      expect(otherwiseRan).toBe(false);
+      expect(otherwiseRan).toBe(true);
     });
 
     it('pred が true なら otherwise が正常に動く', () => {
@@ -1372,14 +1372,14 @@ describe('matchActor', () => {
     });
   });
 
-  // ─── flatMap ───────────────────────────────────────────────────────────────
+  // ─── fallbackWith ──────────────────────────────────────────────────────────
 
-  describe('flatMap — FlatMap.flatMap: context から Matcher を動的生成して接続', () => {
+  describe('fallbackWith — 未マッチ時に context から Matcher を動的生成して接続', () => {
     it('マッチ前: fn(context) が返す Matcher に委譲する', () => {
       const actor = start(fetchMachine); // idle
 
       let delegateCalled = false;
-      matchActor(actor).flatMap((_ctx) => {
+      matchActor(actor).fallbackWith((_ctx) => {
         delegateCalled = true;
         return matchActor(actor).in('idle', () => {});
       });
@@ -1392,7 +1392,7 @@ describe('matchActor', () => {
 
       let otherwiseRan = false;
       matchActor(actor)
-        .flatMap((_ctx) => matchActor(actor).in('idle', () => {}))
+        .fallbackWith((_ctx) => matchActor(actor).in('idle', () => {}))
         .otherwise(() => {
           otherwiseRan = true;
         });
@@ -1405,7 +1405,7 @@ describe('matchActor', () => {
 
       let otherwiseRan = false;
       matchActor(actor)
-        .flatMap((_ctx) => matchActor(actor).in('loading', () => {})) // loading ではない
+        .fallbackWith((_ctx) => matchActor(actor).in('loading', () => {})) // loading ではない
         .otherwise(() => {
           otherwiseRan = true;
         });
@@ -1419,7 +1419,7 @@ describe('matchActor', () => {
       let fnCalled = false;
       matchActor(actor)
         .in('idle', () => {}) // マッチする
-        .flatMap((_ctx) => {
+        .fallbackWith((_ctx) => {
           fnCalled = true;
           return matchActor(actor);
         });
@@ -1431,7 +1431,7 @@ describe('matchActor', () => {
       const actor = start(fetchMachine); // idle, retries: 0
 
       const calls: string[] = [];
-      matchActor(actor).flatMap((ctx) => {
+      matchActor(actor).fallbackWith((ctx) => {
         if (ctx.retries === 0) {
           return matchActor(actor).in('idle', () => calls.push('zero-retries-idle'));
         }

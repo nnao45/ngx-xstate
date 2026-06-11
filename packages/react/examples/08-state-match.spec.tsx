@@ -254,9 +254,9 @@ describe('filter — FunctorFilter: feature flag ゲート', () => {
     expect(screen.getByTestId('filter-result').textContent).toBe('idle-handler');
   });
 
-  it('featureEnabled=false の場合はすべてスキップされ otherwise も抑制される', () => {
+  it('featureEnabled=false の場合は state matching がスキップされ otherwise が実行される', () => {
     render(<FilterApp featureEnabled={false} />);
-    expect(screen.getByTestId('filter-result').textContent).toBe('');
+    expect(screen.getByTestId('filter-result').textContent).toBe('otherwise');
   });
 });
 
