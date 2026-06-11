@@ -2,6 +2,7 @@
 export { typedSetup, noPayload } from './lib/typed-machine';
 export { matchActor } from './lib/state-match';
 export { renderStateTree } from './lib/render-state-tree';
+export { renderMermaid } from './lib/render-mermaid';
 
 export type { TypedMachineDef } from './lib/typed-machine';
 export type { EventsMap, EventUnionFromMap } from './lib/typed-machine-types';
