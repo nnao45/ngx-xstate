@@ -138,3 +138,265 @@ describe('18: State-scoped type-safe send (case/when)', () => {
     expect(snapshot().value).toEqual({ auth: 'active' });
   });
 });
+
+// ─── reportMachine: fold / map / tapAlways / foldMap / flatMap / attempt テスト用 ───
+
+const reportMachine = typedSetup({
+  context: z.object({
+    count: z.number(),
+    role: z.string(),
+    rawJson: z.string(),
+  }),
+  events: {
+    START: noPayload,
+    FINISH: z.object({ rawJson: z.string() }),
+    FAIL: noPayload,
+    RESET: noPayload,
+  },
+}).createMachine({
+  id: 'report',
+  context: { count: 0, role: 'user', rawJson: '{}' },
+  initial: 'idle',
+  states: {
+    idle: { on: { START: 'running' } },
+    running: {
+      on: {
+        FINISH: { target: 'done', actions: assign({ rawJson: ({ event }) => event.rawJson }) },
+        FAIL: { target: 'error', actions: assign({ count: ({ context }) => context.count + 1 }) },
+      },
+    },
+    done: { on: { RESET: 'idle' } },
+    error: { on: { RESET: 'idle' } },
+  },
+});
+
+describe('fold — 状態から値を返す網羅的パターンマッチ', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('idle 状態で fold が "待機中" を返す', () => {
+    const { actorRef } = run(() => injectActor(reportMachine));
+
+    const result = matchActor(actorRef).fold({
+      idle: () => '待機中',
+      running: () => '実行中',
+      done: () => '完了',
+      error: () => 'エラー',
+      _: () => '不明',
+    });
+
+    expect(result).toBe('待機中');
+  });
+
+  it('START 後 running 状態で fold が "実行中" を返す', () => {
+    const { send, actorRef } = run(() => injectActor(reportMachine));
+    send({ type: 'START' });
+
+    const result = matchActor(actorRef).fold({
+      idle: () => '待機中',
+      running: () => '実行中',
+      done: () => '完了',
+      error: () => 'エラー',
+      _: () => '不明',
+    });
+
+    expect(result).toBe('実行中');
+  });
+});
+
+describe('map — Functor.map: context を view モデルに変換', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('map で変換した context が fold のスコープに渡る', () => {
+    const { actorRef } = run(() => injectActor(reportMachine));
+
+    const result = matchActor(actorRef)
+      .map((ctx) => ({ label: `試行${ctx.count}回`, isAdmin: ctx.role === 'admin' }))
+      .fold({ idle: (s) => s.context.label, _: () => '' });
+
+    expect(result).toBe('試行0回');
+  });
+
+  it('map 後の context が変換済みの型になっている（isAdmin が boolean）', () => {
+    const { actorRef } = run(() => injectActor(reportMachine));
+
+    let seen: { label: string; isAdmin: boolean } | null = null;
+    matchActor(actorRef)
+      .map((ctx) => ({ label: `試行${ctx.count}回`, isAdmin: ctx.role === 'admin' }))
+      .in('idle', (s) => {
+        seen = s.context;
+      });
+
+    expect(seen).not.toBeNull();
+    expect(seen!.isAdmin).toBe(false);
+    expect(seen!.label).toBe('試行0回');
+  });
+});
+
+describe('tapAlways — FlatMap.flatTap: matched を変えずにログを取る', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('tapAlways の cb は状態に関係なく常に実行される', () => {
+    const { actorRef } = run(() => injectActor(reportMachine));
+
+    const log: string[] = [];
+    matchActor(actorRef).tapAlways((ctx) => {
+      log.push(`count=${ctx.count}`);
+    });
+
+    expect(log).toEqual(['count=0']);
+  });
+
+  it('tapAlways は matched フラグを変えないので otherwise が抑制されない', () => {
+    const { actorRef } = run(() => injectActor(reportMachine));
+
+    let tapRan = false;
+    let otherwiseRan = false;
+    matchActor(actorRef)
+      .tapAlways(() => {
+        tapRan = true;
+      })
+      .in('running', () => {
+        // idle なのでマッチしない
+      })
+      .otherwise(() => {
+        otherwiseRan = true;
+      });
+
+    expect(tapRan).toBe(true);
+    expect(otherwiseRan).toBe(true);
+  });
+});
+
+describe('foldMap — Foldable.foldMap: モノイドで集約', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  const sumMonoid = { empty: 0, combine: (a: number, b: number) => a + b };
+
+  it('idle 状態で foldMap が idle のハンドラ値 1 を返す', () => {
+    const { actorRef } = run(() => injectActor(reportMachine));
+
+    const result = matchActor(actorRef).foldMap(sumMonoid, {
+      idle: () => 1,
+      running: () => 10,
+    });
+
+    expect(result).toBe(1);
+  });
+
+  it('running 状態で foldMap が running のハンドラ値 10 を返す', () => {
+    const { send, actorRef } = run(() => injectActor(reportMachine));
+    send({ type: 'START' });
+
+    const result = matchActor(actorRef).foldMap(sumMonoid, {
+      idle: () => 1,
+      running: () => 10,
+    });
+
+    expect(result).toBe(10);
+  });
+});
+
+describe('flatMap — FlatMap.flatMap: context から Matcher を動的選択', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('role が "admin" のとき admin パスが実行される', () => {
+    // role を 'admin' に書き換えた machine を作成して動作確認
+    const adminReportMachine = typedSetup({
+      context: z.object({
+        count: z.number(),
+        role: z.string(),
+        rawJson: z.string(),
+      }),
+      events: {
+        START: noPayload,
+        FINISH: z.object({ rawJson: z.string() }),
+        FAIL: noPayload,
+        RESET: noPayload,
+      },
+    }).createMachine({
+      id: 'report-admin',
+      context: { count: 0, role: 'admin', rawJson: '{}' },
+      initial: 'idle',
+      states: {
+        idle: { on: { START: 'running' } },
+        running: {
+          on: {
+            FINISH: { target: 'done', actions: assign({ rawJson: ({ event }) => event.rawJson }) },
+            FAIL: { target: 'error', actions: assign({ count: ({ context }) => context.count + 1 }) },
+          },
+        },
+        done: { on: { RESET: 'idle' } },
+        error: { on: { RESET: 'idle' } },
+      },
+    });
+
+    const { actorRef } = run(() => injectActor(adminReportMachine));
+
+    const paths: string[] = [];
+    matchActor(actorRef).flatMap((ctx) => {
+      if (ctx.role === 'admin') {
+        return matchActor(actorRef).in('idle', () => paths.push('admin'));
+      }
+      return matchActor(actorRef).in('idle', () => paths.push('user'));
+    });
+
+    expect(paths).toEqual(['admin']);
+  });
+
+  it('role が "user" のとき user パスが実行される', () => {
+    const { actorRef } = run(() => injectActor(reportMachine)); // role: 'user'
+
+    const paths: string[] = [];
+    matchActor(actorRef).flatMap((ctx) => {
+      if (ctx.role === 'admin') {
+        return matchActor(actorRef).in('idle', () => paths.push('admin'));
+      }
+      return matchActor(actorRef).in('idle', () => paths.push('user'));
+    });
+
+    expect(paths).toEqual(['user']);
+  });
+});
+
+describe('attempt — IO.attempt: ハンドラの例外を捕捉', () => {
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
+
+  it('done 状態で rawJson が正しい JSON なら { ok: true, value: parsed } を返す', () => {
+    const { send, actorRef } = run(() => injectActor(reportMachine));
+    send({ type: 'START' });
+    send({ type: 'FINISH', rawJson: '{"status":"ok"}' });
+
+    const result = matchActor(actorRef).attempt({
+      done: (s) => JSON.parse(s.context.rawJson) as unknown,
+      _: () => null,
+    });
+
+    expect(result).toEqual({ ok: true, value: { status: 'ok' } });
+  });
+
+  it('done 状態で rawJson が壊れた JSON なら { ok: false, error } を返す', () => {
+    const { send, actorRef } = run(() => injectActor(reportMachine));
+    send({ type: 'START' });
+    send({ type: 'FINISH', rawJson: 'NOT_VALID_JSON' });
+
+    const result = matchActor(actorRef).attempt({
+      done: (s) => JSON.parse(s.context.rawJson) as unknown,
+      _: () => null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: unknown }).error).toBeInstanceOf(SyntaxError);
+  });
+});
