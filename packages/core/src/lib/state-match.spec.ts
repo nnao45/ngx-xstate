@@ -853,4 +853,592 @@ describe('matchActor', () => {
       expect(childResult).toBeUndefined();
     });
   });
+
+  // ─── collect ───────────────────────────────────────────────────────────────
+
+  describe('collect — Foldable.toList: 全一致を T[] で収集', () => {
+    it('マッチした状態の結果を配列で返す', () => {
+      const actor = start(fetchMachine); // idle
+
+      const results = matchActor(actor).collect({
+        idle: () => 'ready',
+        loading: () => 'busy',
+        success: () => 'done',
+      });
+
+      expect(results).toEqual(['ready']);
+    });
+
+    it('マッチしない状態のハンドラは結果に含まれない', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const results = matchActor(actor).collect({
+        idle: () => 'ready',
+        success: () => 'done',
+      });
+
+      expect(results).toEqual([]);
+    });
+
+    it('_ はスキップされる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const results = matchActor(actor).collect({
+        idle: () => 'ready',
+        _: () => 'fallback',
+      } as Parameters<typeof matchActor<typeof fetchMachine>>[0] extends never
+        ? never
+        : never);
+
+      // _: () は FoldCases には含まれないため idle だけ収集される
+      const safeResults = matchActor(actor).collect({ idle: () => 'ready' });
+      expect(safeResults).toEqual(['ready']);
+    });
+
+    it('scope から context と value にアクセスできる', () => {
+      const actor = start(fetchMachine); // idle, retries: 0
+
+      const results = matchActor(actor).collect({
+        idle: (s) => ({ value: s.value, retries: s.context.retries }),
+      });
+
+      expect(results).toEqual([{ value: 'idle', retries: 0 }]);
+    });
+  });
+
+  // ─── pipe ──────────────────────────────────────────────────────────────────
+
+  describe('pipe — Kleisli 合成: Matcher → value な変換関数を合成', () => {
+    it('1 段: Matcher を引数に取る関数を適用する', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).pipe(
+        (m) => m.fold({ idle: () => 'ready', _: () => 'other' }),
+      );
+
+      expect(result).toBe('ready');
+    });
+
+    it('2 段: Matcher → Matcher → value と合成できる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const loadingBehavior = (m: ReturnType<typeof matchActor<typeof fetchMachine>>) =>
+        m.in('loading', () => {});
+
+      const result = matchActor(actor).pipe(
+        loadingBehavior,
+        (m) => m.fold({ idle: () => 'idle-result', _: () => 'other' }),
+      );
+
+      expect(result).toBe('idle-result');
+    });
+
+    it('3 段: Matcher → A → B → C と合成できる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).pipe(
+        (m) => m.fold({ idle: () => 42, _: () => 0 }),
+        (n: number) => n * 2,
+        (n: number) => `value=${n}`,
+      );
+
+      expect(result).toBe('value=84');
+    });
+
+    it('in() を含む振る舞いモジュールを再利用できる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const calls: string[] = [];
+      const idleBehavior = (m: ReturnType<typeof matchActor<typeof fetchMachine>>) =>
+        m.in('idle', () => {
+          calls.push('idle');
+        });
+      const loadingBehavior = (m: ReturnType<typeof matchActor<typeof fetchMachine>>) =>
+        m.in('loading', () => {
+          calls.push('loading');
+        });
+
+      matchActor(actor).pipe(idleBehavior, loadingBehavior);
+
+      expect(calls).toEqual(['idle']); // idle のみマッチ
+    });
+  });
+
+  // ─── tapAlways ─────────────────────────────────────────────────────────────
+
+  describe('tapAlways — FlatMap.flatTap: matched を変えずに副作用を差し込む', () => {
+    it('常に cb を実行する（状態に関係なく）', () => {
+      const actor = start(fetchMachine); // idle
+
+      let tapped = false;
+      matchActor(actor).tapAlways(() => {
+        tapped = true;
+      });
+
+      expect(tapped).toBe(true);
+    });
+
+    it('matched フラグを変えない — otherwise が抑制されない', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .tapAlways(() => {})
+        .in('loading', () => {}) // マッチしない
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('context を cb に渡す', () => {
+      const actor = start(fetchMachine); // retries: 0
+
+      let seen = -1;
+      matchActor(actor).tapAlways((ctx) => {
+        seen = ctx.retries;
+      });
+
+      expect(seen).toBe(0);
+    });
+
+    it('チェーンで複数回呼び出せる', () => {
+      const actor = start(fetchMachine);
+
+      const taps: number[] = [];
+      matchActor(actor)
+        .tapAlways(() => taps.push(1))
+        .tapAlways(() => taps.push(2))
+        .tapAlways(() => taps.push(3));
+
+      expect(taps).toEqual([1, 2, 3]);
+    });
+  });
+
+  // ─── mapContext ─────────────────────────────────────────────────────────────
+
+  describe('mapContext — Functor.map: context 型を変換', () => {
+    it('後続の in コールバックが変換後の context を受け取る', () => {
+      const actor = start(fetchMachine); // idle, retries: 0
+
+      let seen: string | null = null;
+      matchActor(actor)
+        .mapContext((ctx) => ({ label: `retries=${ctx.retries}` }))
+        .in('idle', (s) => {
+          seen = s.context.label;
+        });
+
+      expect(seen).toBe('retries=0');
+    });
+
+    it('fold でも変換後の context が使われる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor)
+        .mapContext((ctx) => ctx.retries * 10)
+        .fold({ idle: (s) => s.context, _: () => -1 });
+
+      expect(result).toBe(0); // retries(0) * 10
+    });
+
+    it('matched フラグを引き継ぐ — in() 後の mapContext でも otherwise が抑制される', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .in('idle', () => {})
+        .mapContext((ctx) => ctx)
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(false);
+    });
+  });
+
+  // ─── foldMap ───────────────────────────────────────────────────────────────
+
+  describe('foldMap — Foldable.foldMap: モノイドで全一致を集約', () => {
+    const sumMonoid = { empty: 0, combine: (a: number, b: number) => a + b };
+    const concatMonoid = { empty: '', combine: (a: string, b: string) => a + b };
+
+    it('マッチした状態の値をモノイドで畳み込む', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).foldMap(sumMonoid, {
+        idle: () => 10,
+        loading: () => 20,
+      });
+
+      expect(result).toBe(10); // idle のみマッチ
+    });
+
+    it('マッチなしのとき empty を返す', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const result = matchActor(actor).foldMap(sumMonoid, {
+        idle: () => 10,
+        success: () => 30,
+      });
+
+      expect(result).toBe(0); // empty
+    });
+
+    it('文字列モノイドで連結できる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).foldMap(concatMonoid, {
+        idle: (s) => `[${s.value}]`,
+      });
+
+      expect(result).toBe('[idle]');
+    });
+  });
+
+  // ─── orElse ────────────────────────────────────────────────────────────────
+
+  describe('orElse — Alternative.orElse: 未マッチ時に別 Matcher へフォールバック', () => {
+    it('マッチしなかった場合に factory Matcher を実行する', () => {
+      const actor = start(fetchMachine); // idle
+
+      let factoryRan = false;
+      matchActor(actor)
+        .in('loading', () => {}) // マッチしない
+        .orElse(() => {
+          factoryRan = true;
+          return matchActor(actor).in('idle', () => {});
+        });
+
+      expect(factoryRan).toBe(true);
+    });
+
+    it('マッチした場合は factory を呼ばない', () => {
+      const actor = start(fetchMachine); // idle
+
+      let factoryRan = false;
+      matchActor(actor)
+        .in('idle', () => {}) // マッチする
+        .orElse(() => {
+          factoryRan = true;
+          return matchActor(actor);
+        });
+
+      expect(factoryRan).toBe(false);
+    });
+
+    it('factory 内でマッチすれば otherwise が抑制される', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .in('loading', () => {})
+        .orElse(() => matchActor(actor).in('idle', () => {}))
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(false);
+    });
+
+    it('factory 内でもマッチしなければ otherwise が実行される', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .in('loading', () => {})
+        .orElse(() => matchActor(actor).in('success', () => {})) // success でもない
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('複数段のフォールバックを合成できる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const calls: string[] = [];
+      matchActor(actor)
+        .in('loading', () => calls.push('loading'))
+        .orElse(() =>
+          matchActor(actor)
+            .in('success', () => calls.push('success'))
+            .orElse(() => matchActor(actor).in('idle', () => calls.push('idle'))),
+        );
+
+      expect(calls).toEqual(['idle']);
+    });
+  });
+
+  // ─── withFilter ─────────────────────────────────────────────────────────────
+
+  describe('withFilter — FunctorFilter.filter: チェーン全体への前提条件ゲート', () => {
+    it('pred が true なら後続の in が正常に動く', () => {
+      const actor = start(fetchMachine); // idle
+
+      let ran = false;
+      matchActor(actor)
+        .withFilter(() => true)
+        .in('idle', () => {
+          ran = true;
+        });
+
+      expect(ran).toBe(true);
+    });
+
+    it('pred が false なら in が実行されない', () => {
+      const actor = start(fetchMachine); // idle
+
+      let ran = false;
+      matchActor(actor)
+        .withFilter(() => false)
+        .in('idle', () => {
+          ran = true;
+        });
+
+      expect(ran).toBe(false);
+    });
+
+    it('pred が false なら otherwise も実行されない', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .withFilter(() => false)
+        .in('loading', () => {})
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(false);
+    });
+
+    it('pred が true なら otherwise が正常に動く', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .withFilter(() => true)
+        .in('loading', () => {}) // マッチしない
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('context を pred に渡す', () => {
+      const actor = start(fetchMachine); // retries: 0
+
+      let ran = false;
+      matchActor(actor)
+        .withFilter((ctx) => ctx.retries === 0)
+        .in('idle', () => {
+          ran = true;
+        });
+
+      expect(ran).toBe(true);
+    });
+
+    it('context 条件が false なら fold も undefined を返す', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor)
+        .withFilter(() => false)
+        .fold({ idle: () => 'ready', _: () => 'fallback' });
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  // ─── attempt ───────────────────────────────────────────────────────────────
+
+  describe('attempt — IO.attempt: ハンドラ例外を { ok, value/error } に捕捉', () => {
+    it('正常ケース: { ok: true, value: T } を返す', () => {
+      const actor = start(fetchMachine); // idle
+
+      const result = matchActor(actor).attempt({
+        idle: () => 'ready',
+        loading: () => 'busy',
+      });
+
+      expect(result).toEqual({ ok: true, value: 'ready' });
+    });
+
+    it('マッチなし: { ok: true, value: undefined } を返す', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const result = matchActor(actor).attempt({
+        idle: () => 'ready',
+      });
+
+      expect(result).toEqual({ ok: true, value: undefined });
+    });
+
+    it('ハンドラが throw した場合: { ok: false, error } を返す', () => {
+      const actor = start(fetchMachine); // idle
+      const boom = new Error('parse failed');
+
+      const result = matchActor(actor).attempt({
+        idle: () => {
+          throw boom;
+        },
+      });
+
+      expect(result).toEqual({ ok: false, error: boom });
+    });
+
+    it('_ フォールバック付きで { ok: true, value: T } を保証する', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const result = matchActor(actor).attempt({
+        idle: () => 'ready',
+        _: () => 'fallback',
+      });
+
+      expect(result).toEqual({ ok: true, value: 'fallback' });
+    });
+
+    it('例外が発生しても後続コードがクラッシュしない', () => {
+      const actor = start(fetchMachine); // idle
+
+      let afterAttempt = false;
+      const result = matchActor(actor).attempt({
+        idle: () => {
+          throw new TypeError('oops');
+        },
+      });
+      afterAttempt = true;
+
+      expect(result.ok).toBe(false);
+      expect(afterAttempt).toBe(true);
+    });
+  });
+
+  // ─── zip ───────────────────────────────────────────────────────────────────
+
+  describe('zip — Apply.product: 2 つの fold を同時評価してタプルで返す', () => {
+    it('同一スナップショットで 2 つの fold を評価してタプルで返す', () => {
+      const actor = start(fetchMachine); // idle
+
+      const [label, cssClass] = matchActor(actor).zip(
+        { idle: () => 'Ready', loading: () => 'Busy', _: () => 'Unknown' },
+        { idle: () => 'btn-primary', loading: () => 'btn-loading', _: () => 'btn-secondary' },
+      );
+
+      expect(label).toBe('Ready');
+      expect(cssClass).toBe('btn-primary');
+    });
+
+    it('_ なしのとき未マッチ側は undefined になる', () => {
+      const actor = start(fetchMachine); // idle
+
+      const [a, b] = matchActor(actor).zip(
+        { idle: () => 'a-idle' },
+        { loading: () => 'b-loading' }, // idle にはマッチしない
+      );
+
+      expect(a).toBe('a-idle');
+      expect(b).toBeUndefined();
+    });
+
+    it('両方マッチしない場合は [undefined, undefined]', () => {
+      const actor = start(fetchMachine);
+      actor.send({ type: 'FETCH' }); // loading
+
+      const result = matchActor(actor).zip(
+        { idle: () => 'a' },
+        { success: () => 'b' },
+      );
+
+      expect(result).toEqual([undefined, undefined]);
+    });
+
+    it('scope から context と value にアクセスできる', () => {
+      const actor = start(fetchMachine); // idle, retries: 0
+
+      const [val, ret] = matchActor(actor).zip(
+        { idle: (s) => s.value },
+        { idle: (s) => s.context.retries },
+      );
+
+      expect(val).toBe('idle');
+      expect(ret).toBe(0);
+    });
+  });
+
+  // ─── flatMap ───────────────────────────────────────────────────────────────
+
+  describe('flatMap — FlatMap.flatMap: context から Matcher を動的生成して接続', () => {
+    it('マッチ前: fn(context) が返す Matcher に委譲する', () => {
+      const actor = start(fetchMachine); // idle
+
+      let delegateCalled = false;
+      matchActor(actor).flatMap((_ctx) => {
+        delegateCalled = true;
+        return matchActor(actor).in('idle', () => {});
+      });
+
+      expect(delegateCalled).toBe(true);
+    });
+
+    it('委譲先でマッチすれば otherwise が抑制される', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .flatMap((_ctx) => matchActor(actor).in('idle', () => {}))
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(false);
+    });
+
+    it('委譲先でもマッチしなければ otherwise が実行される', () => {
+      const actor = start(fetchMachine); // idle
+
+      let otherwiseRan = false;
+      matchActor(actor)
+        .flatMap((_ctx) => matchActor(actor).in('loading', () => {})) // loading ではない
+        .otherwise(() => {
+          otherwiseRan = true;
+        });
+
+      expect(otherwiseRan).toBe(true);
+    });
+
+    it('既にマッチしている場合は fn を呼ばない', () => {
+      const actor = start(fetchMachine); // idle
+
+      let fnCalled = false;
+      matchActor(actor)
+        .in('idle', () => {}) // マッチする
+        .flatMap((_ctx) => {
+          fnCalled = true;
+          return matchActor(actor);
+        });
+
+      expect(fnCalled).toBe(false);
+    });
+
+    it('context の値によって Matcher を切り替えられる', () => {
+      const actor = start(fetchMachine); // idle, retries: 0
+
+      const calls: string[] = [];
+      matchActor(actor).flatMap((ctx) => {
+        if (ctx.retries === 0) {
+          return matchActor(actor).in('idle', () => calls.push('zero-retries-idle'));
+        }
+        return matchActor(actor).in('idle', () => calls.push('many-retries-idle'));
+      });
+
+      expect(calls).toEqual(['zero-retries-idle']);
+    });
+  });
 });
