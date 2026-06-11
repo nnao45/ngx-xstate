@@ -33,24 +33,27 @@ describe('buildActorOptions', () => {
   it('prefers per-actor inspect over the global inspector', () => {
     const local = vi.fn();
     const global = vi.fn();
-    const opts = buildActorOptions({ inspect: local }, { a: 1 }, global) as {
+    const opts = buildActorOptions<typeof withInput>({ inspect: local }, { count: 1 }, global) as {
       inspect?: (e: InspectionEvent) => void;
       input?: unknown;
     };
     expect(opts.inspect).toBe(local);
-    expect(opts.input).toEqual({ a: 1 });
+    expect(opts.input).toEqual({ count: 1 });
   });
 
   it('falls back to the global inspector when none is given', () => {
     const global = vi.fn();
-    const opts = buildActorOptions(undefined, undefined, global) as {
+    const opts = buildActorOptions<typeof counter>(undefined, undefined, global) as {
       inspect?: (e: InspectionEvent) => void;
     };
     expect(opts.inspect).toBe(global);
   });
 
   it('passes id / systemId / snapshot through', () => {
-    const opts = buildActorOptions({ id: 'x', systemId: 'y' }, undefined) as {
+    const opts = buildActorOptions<typeof counter>(
+      { id: 'x', systemId: 'y' },
+      undefined,
+    ) as {
       id?: string;
       systemId?: string;
       inspect?: unknown;

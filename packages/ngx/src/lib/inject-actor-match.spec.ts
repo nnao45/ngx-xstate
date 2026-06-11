@@ -126,7 +126,31 @@ describe('injectActor().in / .within', () => {
     });
 
     it('exposes within on a dynamic-input actor', () => {
-      const { within } = run(() => injectActor(authMachine, { input: () => ({}) }));
+      // input あり + ネスト状態あり machine で dynamic path の within を確認する
+      const nestedInputMachine = typedSetup({
+        context: z.object({ userId: z.string() }),
+        input: z.object({ userId: z.string() }),
+        events: { LOGIN: noPayload, LOGOUT: noPayload, GO_IDLE: noPayload },
+      }).createMachine({
+        id: 'nestedInput',
+        context: ({ input }) => ({ userId: input.userId }),
+        initial: 'loggedOut',
+        states: {
+          loggedOut: { on: { LOGIN: 'loggedIn' } },
+          loggedIn: {
+            initial: 'active',
+            states: {
+              active: { on: { GO_IDLE: 'away' } },
+              away: {},
+            },
+            on: { LOGOUT: 'loggedOut' },
+          },
+        },
+      });
+
+      const { within } = run(() =>
+        injectActor(nestedInputMachine, { input: () => ({ userId: 'alice' }) }),
+      );
 
       let ran = false;
       within('loggedIn', (s) =>
