@@ -15,6 +15,8 @@ export { validateAndSend } from './lib/validate';
 export { shallowEqual } from './lib/shallow-equal';
 export { attachSchemas, getSchemas, SCHEMAS_KEY } from './lib/schemas';
 export { buildStateMatcher } from './lib/state-match';
+export { inspect } from './lib/inspect';
 
 export type { SchemasPayload } from './lib/schemas';
 export type { StateTree, StateNodeShape, StateTreeOf, WithStateTree } from './lib/state-match';
+export type { Inspector, TransitionInfo, InspectPath, PathsOf, AllEventsOf } from './lib/inspect';
