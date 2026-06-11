@@ -105,7 +105,7 @@ type FoldCases<TTree extends StateTree, TEvent, TContext, T> = {
  * case/when チェーン。`in` はこの階層の状態を横に分岐し、`within` は複合状態の
  * 子へスコープ付きで潜る（コールバックを抜けると外側＝この階層に戻る）。
  *
- * Cats Effect 系モナディックメソッド（collect / pipe / tapAlways / mapContext /
+ * Cats Effect 系モナディックメソッド（collect / pipe / tapAlways / map /
  * foldMap / orElse / filter / attempt / zip / flatMap）も実装済み。
  */
 export interface Matcher<TTree extends StateTree, TEvent, TContext> {
@@ -195,7 +195,7 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
    * Functor.map on context (ReaderT.local) — TContext を U に変換して
    * Matcher<TTree, TEvent, U> を返す。後続の in/fold/when が変換後の型を見る。
    */
-  mapContext<U>(fn: (ctx: TContext) => U): Matcher<TTree, TEvent, U>;
+  map<U>(fn: (ctx: TContext) => U): Matcher<TTree, TEvent, U>;
 
   /**
    * Foldable.foldMap — モノイドを渡して全一致を畳み込む。
@@ -245,7 +245,7 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
 
   /**
    * FlatMap.flatMap (monadic bind >>=) — context から Matcher を動的生成してチェーンに接続する。
-   * mapContext は context の型を変えるだけ（Functor）だが、flatMap は
+   * map は context の型を変えるだけ（Functor）だが、flatMap は
    * context の値によって使う Matcher ごと選択できる（Monad）。
    * 既にマッチしている場合は fn を呼ばずに self を返す。
    */
@@ -296,7 +296,7 @@ function makeDeadMatcher(): Matcher<StateTree, unknown, unknown> {
     pipe: ((...fns: Array<(m: unknown) => unknown>) =>
       fns.reduce((acc: unknown, fn) => fn(acc), dead as unknown)) as never,
     tapAlways: () => dead,
-    mapContext: () => dead as never,
+    map: () => dead as never,
     foldMap: ((monoid: Monoid<unknown>) => monoid.empty) as never,
     orElse: () => dead,
     filter: () => dead,
@@ -443,7 +443,7 @@ function makeMatcher(
       return self;
     },
 
-    mapContext(fn) {
+    map(fn) {
       return makeMatcher(
         parentPath,
         value,
@@ -521,7 +521,7 @@ export function buildStateMatcher(
  * - `.collect(cases)` — Foldable.toList: 全一致を T[] で収集
  * - `.pipe(f1, f2, ...)` — Kleisli 合成: 変換関数を最大 4 段合成
  * - `.tapAlways(cb)` — FlatMap.flatTap: matched を変えずに副作用を差し込む
- * - `.mapContext(fn)` — Functor.map: context 型を変換
+ * - `.map(fn)` — Functor.map: context 型を変換
  * - `.foldMap(monoid, cases)` — Foldable.foldMap: モノイドで全一致を集約
  * - `.orElse(factory)` — Alternative.orElse: 未マッチ時に別 Matcher へフォールバック
  * - `.filter(pred)` — FunctorFilter.filter: チェーン全体への前提条件ゲート

@@ -1017,15 +1017,15 @@ describe('matchActor', () => {
     });
   });
 
-  // ─── mapContext ─────────────────────────────────────────────────────────────
+  // ─── map ─────────────────────────────────────────────────────────────
 
-  describe('mapContext — Functor.map: context 型を変換', () => {
+  describe('map — Functor.map: context 型を変換', () => {
     it('後続の in コールバックが変換後の context を受け取る', () => {
       const actor = start(fetchMachine); // idle, retries: 0
 
       let seen: string | null = null;
       matchActor(actor)
-        .mapContext((ctx) => ({ label: `retries=${ctx.retries}` }))
+        .map((ctx) => ({ label: `retries=${ctx.retries}` }))
         .in('idle', (s) => {
           seen = s.context.label;
         });
@@ -1037,19 +1037,19 @@ describe('matchActor', () => {
       const actor = start(fetchMachine); // idle
 
       const result = matchActor(actor)
-        .mapContext((ctx) => ctx.retries * 10)
+        .map((ctx) => ctx.retries * 10)
         .fold({ idle: (s) => s.context, _: () => -1 });
 
       expect(result).toBe(0); // retries(0) * 10
     });
 
-    it('matched フラグを引き継ぐ — in() 後の mapContext でも otherwise が抑制される', () => {
+    it('matched フラグを引き継ぐ — in() 後の map でも otherwise が抑制される', () => {
       const actor = start(fetchMachine); // idle
 
       let otherwiseRan = false;
       matchActor(actor)
         .in('idle', () => {})
-        .mapContext((ctx) => ctx)
+        .map((ctx) => ctx)
         .otherwise(() => {
           otherwiseRan = true;
         });
