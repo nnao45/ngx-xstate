@@ -64,6 +64,14 @@ type TreeFromLogic<TLogic extends AnyActorLogic> = TLogic extends { [STATE_TREE]
     : FallbackTree<TLogic>
   : FallbackTree<TLogic>;
 
+// ─── Monoid (foldMap 用) ────────────────────────────────────────────────────
+
+/** foldMap に渡すモノイド。empty が単位元、combine が二項演算 */
+export interface Monoid<M> {
+  readonly empty: M;
+  readonly combine: (a: M, b: M) => M;
+}
+
 // ─── Matcher の型 ─────────────────────────────────────────────────────────────
 
 /** 状態 S で有効なイベント（machine 全イベント union を on キーで絞り込む） */
@@ -88,7 +96,7 @@ export interface StateScope<TNode extends StateNodeShape, TEvent, TContext, TNam
   readonly value: TName;
 }
 
-/** fold に渡す cases オブジェクトの型 */
+/** fold / collect / foldMap / attempt / zip に渡す cases オブジェクトの型 */
 type FoldCases<TTree extends StateTree, TEvent, TContext, T> = {
   [K in keyof TTree & string]?: (scope: StateScope<TTree[K], TEvent, TContext, K>) => T;
 };
@@ -96,6 +104,9 @@ type FoldCases<TTree extends StateTree, TEvent, TContext, T> = {
 /**
  * case/when チェーン。`in` はこの階層の状態を横に分岐し、`within` は複合状態の
  * 子へスコープ付きで潜る（コールバックを抜けると外側＝この階層に戻る）。
+ *
+ * Cats Effect 系モナディックメソッド（collect / pipe / tapAlways / map /
+ * foldMap / orElse / filter / attempt / zip / flatMap）も実装済み。
  */
 export interface Matcher<TTree extends StateTree, TEvent, TContext> {
   /** この階層の状態 name に現在一致していれば cb を実行。同じ階層の Matcher を返す */
@@ -142,6 +153,105 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
   fold<T>(cases: FoldCases<TTree, TEvent, TContext, T>): T | undefined;
   /** どの分岐にも一致しなかった時に実行（default） */
   otherwise(cb: () => void): void;
+
+  // ── Cats Effect 系モナディックメソッド ────────────────────────────────────
+
+  /**
+   * Foldable.toList — 全一致を収集して T[] で返す。
+   * fold が「最初のマッチで終了」するのに対し、collect は parallel state の
+   * 複数アクティブ状態を含む全マッチを収集する。
+   */
+  collect<T>(cases: FoldCases<TTree, TEvent, TContext, T>): T[];
+
+  /**
+   * Kleisli 合成 / Arrow — Matcher → value な変換関数を最大 4 段まで合成する。
+   * 「ローディング中の振る舞い」「エラー時の振る舞い」を関数として分離し再利用できる。
+   */
+  pipe<A>(f: (m: Matcher<TTree, TEvent, TContext>) => A): A;
+  pipe<A, B>(
+    f1: (m: Matcher<TTree, TEvent, TContext>) => A,
+    f2: (a: A) => B,
+  ): B;
+  pipe<A, B, C>(
+    f1: (m: Matcher<TTree, TEvent, TContext>) => A,
+    f2: (a: A) => B,
+    f3: (b: B) => C,
+  ): C;
+  pipe<A, B, C, D>(
+    f1: (m: Matcher<TTree, TEvent, TContext>) => A,
+    f2: (a: A) => B,
+    f3: (b: B) => C,
+    f4: (c: C) => D,
+  ): D;
+
+  /**
+   * FlatMap.flatTap — 値・matched フラグを一切変えずに副作用だけ差し込む。
+   * in/when は matched フラグを立てるが、tapAlways は絶対に変えない。
+   * ログ・テレメトリ専用の純粋な観測レーン。
+   */
+  tapAlways(cb: (ctx: TContext) => void): Matcher<TTree, TEvent, TContext>;
+
+  /**
+   * Functor.map on context (ReaderT.local) — TContext を U に変換して
+   * Matcher<TTree, TEvent, U> を返す。後続の in/fold/when が変換後の型を見る。
+   */
+  map<U>(fn: (ctx: TContext) => U): Matcher<TTree, TEvent, U>;
+
+  /**
+   * Foldable.foldMap — モノイドを渡して全一致を畳み込む。
+   * fold は「1件だけ」、collect は「T[]」、foldMap は「モノイドで集約した M」。
+   */
+  foldMap<M>(monoid: Monoid<M>, cases: FoldCases<TTree, TEvent, TContext, M>): M;
+
+  /**
+   * Alternative.orElse — matched === false のとき factory() の Matcher に
+   * フォールバックする。otherwise() との違いはチェーンを継続できる点。
+   */
+  orElse(factory: () => Matcher<TTree, TEvent, TContext>): Matcher<TTree, TEvent, TContext>;
+
+  /**
+   * FunctorFilter.filter — 後続チェーン全体への前提条件ゲート。
+   * pred が false のとき、以降の in/when/fold/otherwise をすべてスキップする。
+   * when が「1ブランチを追加」するのに対し、filter は「チェーン全体に前提を課す」。
+   */
+  filter(pred: (ctx: TContext) => boolean): Matcher<TTree, TEvent, TContext>;
+
+  /**
+   * IO.attempt / ApplicativeError.attempt — ケースハンドラーの例外を型安全に捕捉する。
+   * fold は例外を素通しするが、attempt は { ok: false, error } に変換して返す。
+   * _ あり overload は value が必ず T になる。
+   */
+  attempt<T>(
+    cases: FoldCases<TTree, TEvent, TContext, T> & { _: () => T },
+  ): { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown };
+  attempt<T>(
+    cases: FoldCases<TTree, TEvent, TContext, T>,
+  ):
+    | { readonly ok: true; readonly value: T | undefined }
+    | { readonly ok: false; readonly error: unknown };
+
+  /**
+   * Apply.product — 2 つの fold cases を同一スナップショットで評価してタプルで返す。
+   * 両方に _ を渡すと readonly [A, B] を保証する overload になる。
+   */
+  zip<A, B>(
+    casesA: FoldCases<TTree, TEvent, TContext, A> & { _: () => A },
+    casesB: FoldCases<TTree, TEvent, TContext, B> & { _: () => B },
+  ): readonly [A, B];
+  zip<A, B>(
+    casesA: FoldCases<TTree, TEvent, TContext, A>,
+    casesB: FoldCases<TTree, TEvent, TContext, B>,
+  ): readonly [A | undefined, B | undefined];
+
+  /**
+   * FlatMap.flatMap (monadic bind >>=) — context から Matcher を動的生成してチェーンに接続する。
+   * map は context の型を変えるだけ（Functor）だが、flatMap は
+   * context の値によって使う Matcher ごと選択できる（Monad）。
+   * 既にマッチしている場合は fn を呼ばずに self を返す。
+   */
+  flatMap(
+    fn: (ctx: TContext) => Matcher<TTree, TEvent, TContext>,
+  ): Matcher<TTree, TEvent, TContext>;
 }
 
 // ─── ランタイム ──────────────────────────────────────────────────────────────
@@ -168,6 +278,36 @@ function pathMatches(value: StateValue, path: readonly string[]): boolean {
   return true;
 }
 
+/**
+ * filter(false) が返す dead Matcher。
+ * すべてのメソッドが no-op になり、otherwise も抑制される。
+ */
+function makeDeadMatcher(): Matcher<StateTree, unknown, unknown> {
+  let dead: Matcher<StateTree, unknown, unknown>;
+  const noopFold = (): undefined => undefined;
+  dead = {
+    in: () => dead,
+    within: () => dead,
+    inAny: () => dead,
+    when: () => dead,
+    done: () => dead,
+    fold: noopFold as never,
+    collect: () => [],
+    pipe: ((...fns: Array<(m: unknown) => unknown>) =>
+      fns.reduce((acc: unknown, fn) => fn(acc), dead as unknown)) as never,
+    tapAlways: () => dead,
+    map: () => dead as never,
+    foldMap: ((monoid: Monoid<unknown>) => monoid.empty) as never,
+    orElse: () => dead,
+    filter: () => dead,
+    attempt: () => ({ ok: true as const, value: undefined }),
+    zip: () => [undefined, undefined] as const as never,
+    flatMap: () => dead,
+    otherwise: () => {},
+  };
+  return dead;
+}
+
 function makeMatcher(
   parentPath: readonly string[],
   value: StateValue,
@@ -188,6 +328,54 @@ function makeMatcher(
     }
     const fallback = cases['_'];
     return typeof fallback === 'function' ? fallback(undefined) : undefined;
+  };
+
+  // collect: 全一致を収集（parallel state 対応）
+  const collectImpl = (
+    cases: Record<string, ((scope: unknown) => unknown) | undefined>,
+  ): unknown[] => {
+    const results: unknown[] = [];
+    for (const [key, fn] of Object.entries(cases)) {
+      if (key === '_' || typeof fn !== 'function') continue;
+      if (pathMatches(value, [...parentPath, key])) {
+        results.push(fn({ send, context, value: key }));
+      }
+    }
+    return results;
+  };
+
+  // foldMap: モノイドで全一致を畳み込む
+  const foldMapImpl = (
+    monoid: Monoid<unknown>,
+    cases: Record<string, ((scope: unknown) => unknown) | undefined>,
+  ): unknown => {
+    let acc = monoid.empty;
+    for (const [key, fn] of Object.entries(cases)) {
+      if (key === '_' || typeof fn !== 'function') continue;
+      if (pathMatches(value, [...parentPath, key])) {
+        acc = monoid.combine(acc, fn({ send, context, value: key }));
+      }
+    }
+    return acc;
+  };
+
+  // attempt: fold の例外捕捉版
+  const attemptImpl = (
+    cases: Record<string, ((scope: unknown) => unknown) | undefined>,
+  ): { ok: boolean; value?: unknown; error?: unknown } => {
+    try {
+      return { ok: true, value: foldImpl(cases) };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  };
+
+  // zip: 2 つの fold を同一スナップショットで評価してタプルで返す
+  const zipImpl = (
+    casesA: Record<string, ((scope: unknown) => unknown) | undefined>,
+    casesB: Record<string, ((scope: unknown) => unknown) | undefined>,
+  ): readonly [unknown, unknown] => {
+    return [foldImpl(casesA), foldImpl(casesB)] as const;
   };
 
   const self: Matcher<StateTree, unknown, unknown> = {
@@ -242,6 +430,56 @@ function makeMatcher(
     otherwise(cb) {
       if (!matched.matched) cb();
     },
+
+    // ── Cats Effect 系 ────────────────────────────────────────────────────────
+
+    collect: collectImpl as never,
+
+    pipe: ((...fns: Array<(m: unknown) => unknown>) =>
+      fns.reduce((acc: unknown, fn) => fn(acc), self as unknown)) as never,
+
+    tapAlways(cb) {
+      (cb as (ctx: unknown) => void)(context);
+      return self;
+    },
+
+    map(fn) {
+      return makeMatcher(
+        parentPath,
+        value,
+        send,
+        (fn as (ctx: unknown) => unknown)(context),
+        matched,
+        isDone,
+      ) as never;
+    },
+
+    foldMap: foldMapImpl as never,
+
+    orElse(factory) {
+      if (!matched.matched) {
+        return factory() as Matcher<StateTree, unknown, unknown>;
+      }
+      return self;
+    },
+
+    filter(pred) {
+      if (!(pred as (ctx: unknown) => boolean)(context)) {
+        return makeDeadMatcher();
+      }
+      return self;
+    },
+
+    attempt: attemptImpl as never,
+
+    zip: zipImpl as never,
+
+    flatMap(fn) {
+      if (matched.matched) return self;
+      return (fn as (ctx: unknown) => Matcher<StateTree, unknown, unknown>)(
+        context,
+      ) as Matcher<StateTree, unknown, unknown>;
+    },
   };
   return self;
 }
@@ -270,15 +508,26 @@ export function buildStateMatcher(
 /**
  * actor の現在状態に対する型安全な case/when マッチャを作る。
  *
- * `.in(name, scope => ...)` はその状態のときだけ cb を実行し、`scope.send` はその状態で
- * 有効なイベントだけを受け付ける。`.within(name, child => ...)` で複合状態の子へ潜り、
- * コールバックを抜けると外側（同じ階層）に戻るので別のトップ状態を続けて分岐できる。
- *
- * 新規メソッド:
+ * 基本メソッド:
+ * - `.in(name, scope => ...)` — 状態名マッチ
+ * - `.within(name, child => ...)` — 複合状態への潜降
  * - `.inAny(names, cb)` — 複数状態の OR マッチ
  * - `.when(guard, cb)` — コンテキスト述語マッチ
  * - `.done(cb)` — 終了状態マッチ（snapshot.done === true）
  * - `.fold(cases)` — 値を返す網羅的パターンマッチ
+ * - `.otherwise(cb)` — フォールバック
+ *
+ * Cats Effect 系モナディックメソッド:
+ * - `.collect(cases)` — Foldable.toList: 全一致を T[] で収集
+ * - `.pipe(f1, f2, ...)` — Kleisli 合成: 変換関数を最大 4 段合成
+ * - `.tapAlways(cb)` — FlatMap.flatTap: matched を変えずに副作用を差し込む
+ * - `.map(fn)` — Functor.map: context 型を変換
+ * - `.foldMap(monoid, cases)` — Foldable.foldMap: モノイドで全一致を集約
+ * - `.orElse(factory)` — Alternative.orElse: 未マッチ時に別 Matcher へフォールバック
+ * - `.filter(pred)` — FunctorFilter.filter: チェーン全体への前提条件ゲート
+ * - `.attempt(cases)` — IO.attempt: ハンドラ例外を { ok, value/error } に捕捉
+ * - `.zip(casesA, casesB)` — Apply.product: 2 つの fold を同時評価してタプルで返す
+ * - `.flatMap(fn)` — FlatMap.flatMap: context から Matcher を動的生成して接続
  *
  * @example
  * matchActor(actorRef)
@@ -295,6 +544,12 @@ export function buildStateMatcher(
  *   success: () => 'Done',
  *   _:       () => 'Unknown',
  * });
+ *
+ * @example
+ * const [label, cssClass] = matchActor(actorRef).zip(
+ *   { idle: () => 'Ready', loading: () => 'Busy', _: () => 'Unknown' },
+ *   { idle: () => 'btn-primary', loading: () => 'btn-loading', _: () => 'btn-secondary' },
+ * );
  */
 export function matchActor<TLogic extends AnyActorLogic>(
   actor: Actor<TLogic>,

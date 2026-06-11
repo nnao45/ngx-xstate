@@ -52,19 +52,114 @@ actor.send({ type: 'ADD', by: 5 }); // ✅ payload type-checked
 
 ## `matchActor(actorRef)`
 
-A monadic, state-scoped `case/when`. Each branch runs only when the actor is currently in that state, and its `send` is narrowed to the events **valid in that state** — sending anything else is a compile error.
+A state-scoped `case/when` chain with value-returning fold and [Cats Effect](https://typelevel.org/cats-effect/)–style monadic methods. Each `.in()` branch runs only when the actor is in that state, and its `send` is narrowed to events **valid in that state** — sending anything else is a compile error.
+
+### Imperative chain (side effects)
 
 ```ts
 import { matchActor } from '@zstate/core';
 
 matchActor(actor)
-  .in('idle', (idle) => idle.send({ type: 'FETCH' }))     // ✅ valid in 'idle'
-  .in('loading', (loading) => loading.send({ type: 'CANCEL' }))
-  .within('loggedIn', (s) => s.in('active', (a) => a.send({ type: 'GO_IDLE' })))
-  .otherwise(() => {/* in none of the above */});
+  .in('idle',    idle    => idle.send({ type: 'FETCH' }))   // ✅ FETCH valid in idle only
+  .in('loading', loading => loading.send({ type: 'CANCEL' }))
+  .within('loggedIn', s  => s.in('active', a => a.send({ type: 'GO_IDLE' })))
+  .inAny(['idle', 'success'], s => console.log(s.value))
+  .when(ctx => ctx.retries > 3, () => alert('Too many retries'))
+  .done(ctx => console.log('Finished:', ctx.result))
+  .otherwise(() => console.log('no match'));
 ```
 
-`.in(name, scope => …)` matches a state at this level; `.within(name, child => …)` descends into a compound state and re-ascends after the callback; `.otherwise(cb)` is the `default` clause. Machines built without `typedSetup` degrade gracefully: state names still match (derived from the schema), only the per-state `send` narrowing falls back to all events.
+Machines built without `typedSetup` degrade gracefully: state names still match, only the per-state `send` narrowing falls back to accepting all events.
+
+### `.fold(cases)` — value-returning pattern match
+
+```ts
+const label = matchActor(actor).fold({
+  idle:    ()  => 'Ready',
+  loading: (s) => `Loading (retry ${s.context.retries})`,
+  success: ()  => 'Done',
+  _:       ()  => 'Unknown',  // _ guarantees T (no undefined)
+});
+```
+
+### Cats Effect–style monadic methods
+
+| Method | Cats analogue | Summary |
+|--------|--------------|---------|
+| `.collect(cases)` | `Foldable.toList` | Gathers **all** matches into `T[]` — use with parallel states |
+| `.pipe(f1, f2?, …)` | `Kleisli` / Arrow | Threads the `Matcher` through up to 4 transform fns |
+| `.tapAlways(cb)` | `FlatMap.flatTap` | Runs `cb(ctx)` always without touching `matched` — for logging/telemetry |
+| `.map(fn)` | `Functor.map` | Transforms context type; downstream `in`/`fold`/`when` see `fn(ctx)` |
+| `.foldMap(monoid, cases)` | `Foldable.foldMap` | Aggregates **all** matches via a monoid |
+| `.orElse(factory)` | `Alternative.orElse` | When unmatched, delegates to `factory()` — composable fallbacks |
+| `.filter(pred)` | `FunctorFilter.filter` | Gates entire chain; `false` skips `otherwise` too |
+| `.attempt(cases)` | `IO.attempt` | Like `fold` but returns `{ ok, value/error }` — never throws |
+| `.zip(casesA, casesB)` | `Apply.product` | Evaluates two independent fold sets in one snapshot pass |
+| `.flatMap(fn)` | `FlatMap.flatMap` | When unmatched, replaces active `Matcher` with `fn(ctx)` |
+
+**Examples:**
+
+```ts
+// zip — derive two values (label + CSS class) from one snapshot
+const [label, cls] = matchActor(actor).zip(
+  { idle: () => 'Ready',   loading: () => 'Busy',    _: () => '...' },
+  { idle: () => 'btn-ok',  loading: () => 'btn-spin', _: () => 'btn-muted' },
+);
+
+// attempt — catch handler exceptions into { ok, value/error }
+const result = matchActor(actor).attempt({
+  loaded: (s) => JSON.parse(s.context.rawPayload),  // may throw
+  _:      ()  => null,
+});
+if (!result.ok) logger.error(result.error);
+
+// filter — feature-flag gate on entire chain
+matchActor(actor)
+  .filter(ctx => ctx.featureFlags.includes('NEW_UI'))
+  .in('idle',    () => renderNewUI())
+  .in('loading', () => renderNewSpinner())
+  .otherwise(     () => renderLegacyUI());
+
+// orElse — composable fallback across actors
+matchActor(primaryActor)
+  .in('ready', (s) => dispatch(s))
+  .orElse(() => matchActor(fallbackActor).in('ready', (s) => dispatch(s)));
+
+// map — transform context into a view-model
+matchActor(actor)
+  .map(ctx => ({ title: ctx.name.toUpperCase(), isAdmin: ctx.role === 'admin' }))
+  .in('dashboard', (s) => render(s.context.title, s.context.isAdmin));
+
+// tapAlways — logging lane that never affects matched
+matchActor(actor)
+  .tapAlways(ctx => analytics.track('state-match', ctx))
+  .in('error', () => showErrorBanner())
+  .otherwise(() => showDefault());
+
+// foldMap — aggregate all active states with a monoid
+const sumMonoid = { empty: 0, combine: (a: number, b: number) => a + b };
+const score = matchActor(actor).foldMap(sumMonoid, {
+  idle: () => 0, loading: () => 1, error: () => 5,
+});
+
+// collect — T[] of all matching states (parallel state support)
+const labels = matchActor(actor).collect({
+  running: () => 'Running',
+  paused:  () => 'Paused',
+});
+
+// pipe — compose reusable behavior modules
+const withLoading = (m: Matcher) => m.in('loading', () => showSpinner());
+const withError   = (m: Matcher) => m.in('error',   () => showBanner());
+matchActor(actor).pipe(withLoading, withError);
+
+// flatMap — dynamic Matcher selection from context
+matchActor(actor).flatMap(ctx =>
+  ctx.role === 'admin'
+    ? matchActor(actor).in('dashboard', () => renderAdminDash())
+    : matchActor(actor).in('dashboard', () => renderUserDash()),
+);
+```
 
 ---
 
