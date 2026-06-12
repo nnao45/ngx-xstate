@@ -1,0 +1,13 @@
+[package]
+name = "nixx"
+version = "0.1.0"
+edition = "2021"
+description = "Nix shell DSL preprocessor — converts shell! { } blocks to Nix indented strings"
+license = "MIT"
+
+[[bin]]
+name = "nixx"
+path = "src/main.rs"
+
+[dev-dependencies]
+pretty_assertions = "1"

@@ -1,0 +1,24 @@
+let
+  port = 3000;
+in {
+  tasks.test = shell! {
+    cargo fmt --check
+    cargo clippy --workspace
+    cargo test --workspace
+  };
+
+  tasks.dev = shell! {
+    export PORT=@nix(port)
+    npm run dev
+  };
+
+  tasks.show-home = shell! {
+    echo ${HOME}
+    echo "my home is ${HOME}"
+  };
+
+  tasks.with-deps = shell! [ pkgs.cargo pkgs.ripgrep ] {
+    cargo test
+    rg TODO .
+  };
+}
