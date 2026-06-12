@@ -65,7 +65,10 @@ const statusMachine = typedSetup({
     loading: {
       on: {
         RESOLVE: { target: 'loaded', actions: assign({ rawJson: ({ event }) => event.rawJson }) },
-        FAIL: { target: 'error', actions: assign({ retries: ({ context }) => context.retries + 1 }) },
+        FAIL: {
+          target: 'error',
+          actions: assign({ retries: ({ context }) => context.retries + 1 }),
+        },
       },
     },
     loaded: {},
@@ -337,9 +340,7 @@ function OrElseApp() {
 
   matchActor(actorRef)
     .in('loading', () => results.push('loading-branch'))
-    .orElse(() =>
-      matchActor(actorRef).in('idle', () => results.push('idle-fallback')),
-    );
+    .orElse(() => matchActor(actorRef).in('idle', () => results.push('idle-fallback')));
 
   return (
     <div>
@@ -367,9 +368,7 @@ describe('orElse — Alternative: 未マッチ時フォールバック', () => {
 
       matchActor(actorRef)
         .in('loading', () => results.push('loading-branch'))
-        .orElse(() =>
-          matchActor(actorRef).in('idle', () => results.push('idle-fallback')),
-        );
+        .orElse(() => matchActor(actorRef).in('idle', () => results.push('idle-fallback')));
 
       return (
         <div>

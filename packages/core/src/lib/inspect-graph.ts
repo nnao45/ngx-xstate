@@ -1,19 +1,20 @@
-import { createActor, type AnyMachineSnapshot, type AnyStateMachine } from 'xstate';
+import type { AnyStateMachine } from 'xstate';
+import {
+  getMachineRoot,
+  getNodeTransitionMap,
+  getInitialSnapshot,
+  getSnapshotValue,
+  getMachineGuardImplementations,
+  guardName,
+  resolveGuardLabel,
+  actionName,
+  activeLeaves,
+  type V5StateNode,
+} from './compat/xstate-v5';
 import type { TransitionInfo, InspectPath } from './inspect-types';
 
-export interface RawNode {
-  readonly key: string;
-  readonly type: string;
-  readonly path: readonly string[];
-  readonly states: Record<string, RawNode>;
-  readonly config: { readonly initial?: unknown };
-}
-
-interface RawTrans {
-  readonly target: Array<{ readonly path: readonly string[] }> | undefined;
-  readonly eventType: string;
-  readonly guard?: unknown;
-}
+export type { V5StateNode as RawNode };
+export { activeLeaves, allActiveStates } from './compat/xstate-v5';
 
 export interface NodeMeta {
   readonly path: string;
@@ -28,60 +29,77 @@ export interface Internals {
   readonly initialState: string;
 }
 
-function getRoot(machine: AnyStateMachine): RawNode {
-  return (machine as unknown as { root: RawNode }).root;
+function dotJoin(prefix: string, key: string): string {
+  return prefix.length > 0 ? `${prefix}.${key}` : key;
 }
 
-function rawTransitions(node: RawNode): RawTrans[] {
-  const map = (node as unknown as { transitions?: Map<string, RawTrans[]> }).transitions;
-  if (map === undefined) return [];
-  const out: RawTrans[] = [];
-  for (const [et, defs] of map) if (et !== '*') for (const d of defs) out.push(d);
-  return out;
-}
-
-export function guardName(guard: unknown): string | undefined {
-  if (guard == null) return undefined;
-  if (typeof guard === 'string') return guard;
-  if (typeof guard === 'function') {
-    const n = (guard as { name?: string }).name;
-    return n != null && n !== 'guard' ? n : '(fn)';
-  }
-  if (typeof guard === 'object') {
-    const t = (guard as Record<string, unknown>)['type'];
-    if (typeof t === 'string') return t;
-  }
-  return '(unknown)';
-}
-
-function joinPath(prefix: string, key: string): string { return prefix.length > 0 ? `${prefix}.${key}` : key; }
-function snapshotValue(snapshot: AnyMachineSnapshot): unknown { return (snapshot as unknown as { value: unknown }).value; }
-
-export function activeLeaves(value: unknown, prefix = ''): string[] {
-  if (typeof value === 'string') return [joinPath(prefix, value)];
-  if (typeof value === 'object' && value !== null) {
-    const r: string[] = [];
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) r.push(...activeLeaves(v, joinPath(prefix, k)));
-    return r;
-  }
-  return prefix.length > 0 ? [prefix] : [];
-}
-
-/** snapshot.value から全アクティブ状態（複合 + リーフ）を収集 */
-export function allActiveStates(snapshot: AnyMachineSnapshot): string[] {
-  function collect(value: unknown, prefix: string): string[] {
-    if (typeof value === 'string') return [joinPath(prefix, value)];
-    if (typeof value === 'object' && value !== null) {
-      const result: string[] = [];
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        const path = joinPath(prefix, k);
-        result.push(path, ...collect(v, path));
+function buildEdgeList(
+  src: string,
+  node: V5StateNode,
+  edgeList: TransitionInfo[],
+  allEvents: Set<string>,
+  guardImpls: Record<string, unknown>,
+): void {
+  for (const [et, defs] of getNodeTransitionMap(node)) {
+    if (et === '*') continue;
+    allEvents.add(et);
+    defs.forEach((t, idx) => {
+      const guard = guardName(t.guard);
+      const gl = resolveGuardLabel(t.guard, guardImpls);
+      const acts = (t.actions ?? []).map((a) => actionName(a));
+      const id = `${src}::${et}::${idx}`;
+      if (t.target !== undefined && t.target.length > 0) {
+        for (const tgt of t.target) {
+          edgeList.push({
+            id,
+            event: et,
+            source: src,
+            target: tgt.path.join('.'),
+            index: idx,
+            guard,
+            guardLabel: gl,
+            actions: acts,
+          });
+        }
+      } else {
+        edgeList.push({
+          id,
+          event: et,
+          source: src,
+          target: undefined,
+          index: idx,
+          guard,
+          guardLabel: gl,
+          actions: acts,
+        });
       }
-      return result;
-    }
-    return prefix.length > 0 ? [prefix] : [];
+    });
   }
-  return collect(snapshotValue(snapshot), '');
+}
+
+function walkGraph(
+  node: V5StateNode,
+  nodes: Map<string, NodeMeta>,
+  edges: Map<string, TransitionInfo[]>,
+  initChild: Map<string, string>,
+  allEvents: Set<string>,
+  guardImpls: Record<string, unknown>,
+): void {
+  const dotPath = node.path.join('.');
+  if (node.path.length > 0) {
+    nodes.set(dotPath, { path: dotPath, type: node.type });
+    edges.set(dotPath, []);
+    if (node.type === 'compound' && typeof node.config.initial === 'string') {
+      initChild.set(dotPath, dotJoin(dotPath, node.config.initial));
+    }
+  }
+  if (dotPath.length > 0) {
+    const edgeList = edges.get(dotPath);
+    if (edgeList !== undefined) buildEdgeList(dotPath, node, edgeList, allEvents, guardImpls);
+  }
+  for (const child of Object.values(node.states)) {
+    walkGraph(child, nodes, edges, initChild, allEvents, guardImpls);
+  }
 }
 
 export function buildInternals(machine: AnyStateMachine): Internals {
@@ -89,43 +107,12 @@ export function buildInternals(machine: AnyStateMachine): Internals {
   const edges = new Map<string, TransitionInfo[]>();
   const initChild = new Map<string, string>();
   const allEvents = new Set<string>();
+  const guardImpls = getMachineGuardImplementations(machine);
 
-  function walk(node: RawNode): void {
-    const path = node.path.join('.');
-    if (node.path.length > 0) {
-      nodes.set(path, { path, type: node.type });
-      edges.set(path, []);
-      if (node.type === 'compound' && typeof node.config.initial === 'string') {
-        initChild.set(path, joinPath(path, node.config.initial));
-      }
-    }
+  walkGraph(getMachineRoot(machine), nodes, edges, initChild, allEvents, guardImpls);
 
-    const src = path;
-    if (src.length > 0) {
-      for (const t of rawTransitions(node)) {
-        allEvents.add(t.eventType);
-        const guard = guardName(t.guard);
-        const edgeList = edges.get(src);
-        if (edgeList === undefined) continue;
-        if (t.target !== undefined && t.target.length > 0) {
-          for (const tgt of t.target) {
-            edgeList.push({ event: t.eventType, source: src, target: tgt.path.join('.'), guard });
-          }
-        } else {
-          edgeList.push({ event: t.eventType, source: src, target: undefined, guard });
-        }
-      }
-    }
-
-    for (const child of Object.values(node.states)) {
-      walk(child);
-    }
-  }
-
-  walk(getRoot(machine));
-
-  const initSnap = createActor(machine).getSnapshot() as AnyMachineSnapshot;
-  const initialState = activeLeaves(snapshotValue(initSnap))[0] ?? '';
+  const initSnap = getInitialSnapshot(machine);
+  const initialState = activeLeaves(getSnapshotValue(initSnap))[0] ?? '';
 
   return { nodes, edges, initChild, allEvents, initialState };
 }
@@ -133,14 +120,24 @@ export function buildInternals(machine: AnyStateMachine): Internals {
 export function expandInitChain(state: string, initChild: ReadonlyMap<string, string>): string[] {
   const result: string[] = [state];
   let cur = state;
-  for (;;) { const next = initChild.get(cur); if (next === undefined) break; cur = next; result.push(cur); }
+  for (;;) {
+    const next = initChild.get(cur);
+    if (next === undefined) break;
+    cur = next;
+    result.push(cur);
+  }
   return result;
 }
 
 function reconstructPath(prev: Map<string, string>, from: string, to: string): string[] {
   const path: string[] = [to];
   let node: string = to;
-  while (node !== from) { const p = prev.get(node); if (p === undefined) break; node = p; path.unshift(node); }
+  while (node !== from) {
+    const p = prev.get(node);
+    if (p === undefined) break;
+    node = p;
+    path.unshift(node);
+  }
   return path;
 }
 
@@ -220,7 +217,6 @@ export function findCycles(
     counter++;
     stack.push(v);
     onStack.add(v);
-
     for (const t of edges.get(v) ?? []) {
       if (t.target === undefined) continue;
       for (const w of expandInitChain(t.target, initChild)) {
@@ -232,7 +228,6 @@ export function findCycles(
         }
       }
     }
-
     if (low.get(v) === idx.get(v)) {
       const scc: string[] = [];
       let w: string | undefined;
@@ -254,9 +249,7 @@ export function findCycles(
     }
   }
 
-  for (const v of nodes.keys()) {
-    if (!idx.has(v)) sc(v);
-  }
+  for (const v of nodes.keys()) if (!idx.has(v)) sc(v);
   return result;
 }
 
@@ -269,7 +262,6 @@ export function dfsAllPaths(
   maxDepth: number,
 ): InspectPath[] {
   const result: InspectPath[] = [];
-
   function dfs(cur: string, stPath: string[], evPath: string[], visited: Set<string>): void {
     const node = nodes.get(cur);
     const outs = edges.get(cur) ?? [];
@@ -290,7 +282,6 @@ export function dfsAllPaths(
       visited.delete(leaf);
     }
   }
-
   dfs(start, [start], [], new Set([start]));
   return result;
 }

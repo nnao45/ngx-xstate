@@ -50,10 +50,7 @@ describe('buildActorOptions', () => {
   });
 
   it('passes id / systemId / snapshot through', () => {
-    const opts = buildActorOptions<typeof counter>(
-      { id: 'x', systemId: 'y' },
-      undefined,
-    ) as {
+    const opts = buildActorOptions<typeof counter>({ id: 'x', systemId: 'y' }, undefined) as {
       id?: string;
       systemId?: string;
       inspect?: unknown;
