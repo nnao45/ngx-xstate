@@ -332,7 +332,10 @@ describe('fallbackWith — 未マッチ時に context から Matcher を動的�
         running: {
           on: {
             FINISH: { target: 'done', actions: assign({ rawJson: ({ event }) => event.rawJson }) },
-            FAIL: { target: 'error', actions: assign({ count: ({ context }) => context.count + 1 }) },
+            FAIL: {
+              target: 'error',
+              actions: assign({ count: ({ context }) => context.count + 1 }),
+            },
           },
         },
         done: { on: { RESET: 'idle' } },

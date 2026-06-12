@@ -55,10 +55,10 @@ const wizardMachine = createMachine({
 describe('renderMermaid', () => {
   describe('machine input (static structure)', () => {
     it('outputs stateDiagram-v2 header', () => {
-      expect(renderMermaid(authMachine)).toMatch(/^stateDiagram-v2/);
+      expect(renderMermaid(authMachine)).toMatch(/^stateDiagram-v2/u);
     });
 
-    it('renders initial transition and nested compound state', () => {
+    it('renders initial transition and nested compound state with full-path IDs', () => {
       const diagram = renderMermaid(authMachine);
       expect(diagram).toBe(
         [
@@ -66,9 +66,11 @@ describe('renderMermaid', () => {
           '    [*] --> loggedOut',
           '    loggedOut --> loggedIn : LOGIN',
           '    state loggedIn {',
-          '        [*] --> active',
-          '        active --> idle : GO_IDLE',
-          '        idle --> active : WAKE_UP',
+          '        [*] --> loggedIn_active',
+          '        state "active" as loggedIn_active',
+          '        loggedIn_active --> loggedIn_idle : GO_IDLE',
+          '        state "idle" as loggedIn_idle',
+          '        loggedIn_idle --> loggedIn_active : WAKE_UP',
           '    }',
           '    loggedIn --> loggedOut : LOGOUT',
           '    closed --> [*]',
@@ -76,17 +78,21 @@ describe('renderMermaid', () => {
       );
     });
 
-    it('renders parallel root with -- region separators', () => {
+    it('renders parallel root with -- region separators and full-path IDs', () => {
       const diagram = renderMermaid(playerMachine);
       expect(diagram).toBe(
         [
           'stateDiagram-v2',
           '    state playback {',
-          '        [*] --> paused',
+          '        [*] --> playback_paused',
+          '        state "paused" as playback_paused',
+          '        state "playing" as playback_playing',
           '    }',
           '    --',
           '    state volume {',
-          '        [*] --> low',
+          '        [*] --> volume_low',
+          '        state "low" as volume_low',
+          '        state "high" as volume_high',
           '    }',
         ].join('\n'),
       );
@@ -101,6 +107,32 @@ describe('renderMermaid', () => {
       const diagram = renderMermaid(authMachine);
       expect(diagram).not.toContain('classDef');
       expect(diagram).not.toContain('class ');
+    });
+
+    it('uses full-path mermaid IDs to avoid name collisions', () => {
+      const collisionMachine = createMachine({
+        initial: 'a',
+        states: {
+          a: {
+            initial: 'idle',
+            states: { idle: { on: { GO: 'done' } }, done: { type: 'final' } },
+          },
+          b: {
+            initial: 'idle',
+            states: { idle: { on: { GO: 'done' } }, done: { type: 'final' } },
+          },
+        },
+      });
+      const diagram = renderMermaid(collisionMachine);
+      // Both nested states get globally-unique mermaid IDs
+      expect(diagram).toContain('a_idle');
+      expect(diagram).toContain('b_idle');
+      // Transitions reference full-path IDs, not the bare key
+      expect(diagram).toContain('a_idle --> a_done');
+      expect(diagram).toContain('b_idle --> b_done');
+      // No bare 'idle' appears as a mermaid node ID in transition arrows
+      expect(diagram).not.toContain(' idle -->');
+      expect(diagram).not.toContain('--> idle ');
     });
   });
 
@@ -118,27 +150,27 @@ describe('renderMermaid', () => {
       expect(diagram).not.toContain('class loggedIn active');
     });
 
-    it('marks nested active states after transition', () => {
+    it('marks nested active states using full-path IDs after transition', () => {
       const actor = createActor(authMachine).start();
       actor.send({ type: 'LOGIN' }); // → loggedIn.active
 
       const diagram = renderMermaid(actor);
       expect(diagram).toContain('class loggedIn active');
-      expect(diagram).toContain('class active active');
+      expect(diagram).toContain('class loggedIn_active active');
       expect(diagram).not.toContain('class loggedOut active');
-      expect(diagram).not.toContain('class idle active');
+      expect(diagram).not.toContain('class loggedIn_idle active');
     });
 
-    it('marks both parallel regions and their active children', () => {
+    it('marks both parallel regions and their active children with full-path IDs', () => {
       const actor = createActor(playerMachine).start();
       const diagram = renderMermaid(actor);
 
       expect(diagram).toContain('class playback active');
       expect(diagram).toContain('class volume active');
-      expect(diagram).toContain('class paused active');
-      expect(diagram).toContain('class low active');
-      expect(diagram).not.toContain('class playing active');
-      expect(diagram).not.toContain('class high active');
+      expect(diagram).toContain('class playback_paused active');
+      expect(diagram).toContain('class volume_low active');
+      expect(diagram).not.toContain('class playback_playing active');
+      expect(diagram).not.toContain('class volume_high active');
     });
 
     it('renders a flat machine with active marker', () => {

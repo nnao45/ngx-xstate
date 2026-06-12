@@ -887,9 +887,7 @@ describe('matchActor', () => {
       const results = matchActor(actor).collect({
         idle: () => 'ready',
         _: () => 'fallback',
-      } as Parameters<typeof matchActor<typeof fetchMachine>>[0] extends never
-        ? never
-        : never);
+      } as Parameters<typeof matchActor<typeof fetchMachine>>[0] extends never ? never : never);
 
       // _: () は FoldCases には含まれないため idle だけ収集される
       const safeResults = matchActor(actor).collect({ idle: () => 'ready' });
@@ -913,8 +911,8 @@ describe('matchActor', () => {
     it('1 段: Matcher を引数に取る関数を適用する', () => {
       const actor = start(fetchMachine); // idle
 
-      const result = matchActor(actor).pipe(
-        (m) => m.fold({ idle: () => 'ready', _: () => 'other' }),
+      const result = matchActor(actor).pipe((m) =>
+        m.fold({ idle: () => 'ready', _: () => 'other' }),
       );
 
       expect(result).toBe('ready');
@@ -926,9 +924,8 @@ describe('matchActor', () => {
       const loadingBehavior = (m: ReturnType<typeof matchActor<typeof fetchMachine>>) =>
         m.in('loading', () => {});
 
-      const result = matchActor(actor).pipe(
-        loadingBehavior,
-        (m) => m.fold({ idle: () => 'idle-result', _: () => 'other' }),
+      const result = matchActor(actor).pipe(loadingBehavior, (m) =>
+        m.fold({ idle: () => 'idle-result', _: () => 'other' }),
       );
 
       expect(result).toBe('idle-result');
@@ -1351,10 +1348,7 @@ describe('matchActor', () => {
       const actor = start(fetchMachine);
       actor.send({ type: 'FETCH' }); // loading
 
-      const result = matchActor(actor).zip(
-        { idle: () => 'a' },
-        { success: () => 'b' },
-      );
+      const result = matchActor(actor).zip({ idle: () => 'a' }, { success: () => 'b' });
 
       expect(result).toEqual([undefined, undefined]);
     });

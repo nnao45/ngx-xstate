@@ -4,11 +4,27 @@ import type { STATE_TREE, StateTree } from './state-match';
 
 /** 遷移の静的情報 */
 export interface TransitionInfo {
+  /** "source::event::index" — 同一source+eventの複数guard遷移を区別する一意ID */
+  readonly id: string;
   readonly event: string;
   readonly source: string;
   readonly target: string | undefined;
+  /** 同一 source+event 内での順序（0始まり） */
+  readonly index: number;
   /** guard が設定されている場合の名前または "(fn)" */
   readonly guard: string | undefined;
+  /** explainGuard() で付与した人間可読ラベル */
+  readonly guardLabel: string | undefined;
+  /** この遷移に紐づくアクション名一覧 */
+  readonly actions: readonly string[];
+}
+
+/** 有効遷移ごとの「発火したら実行されるアクション」 */
+export interface CommandInfo {
+  readonly event: string;
+  readonly source: string;
+  readonly target: string | undefined;
+  readonly actions: readonly string[];
 }
 
 /** 状態列 + イベント列のペアで表したパス */
@@ -35,34 +51,32 @@ export type PathsOf<
   : {
       [K in keyof TTree & string]:
         | (Prefix extends '' ? K : `${Prefix}.${K}`)
-        | PathsOf<
-            TTree[K]['children'],
-            Prefix extends '' ? K : `${Prefix}.${K}`,
-            [0, ...D]
-          >;
+        | PathsOf<TTree[K]['children'], Prefix extends '' ? K : `${Prefix}.${K}`, [0, ...D]>;
     }[keyof TTree & string];
 
 /** StateTree 全体から全イベント型を収集（最大8段）*/
-export type AllEventsOf<TTree extends StateTree, D extends DepthGuard = []> =
-  D['length'] extends 8
-    ? never
-    : {
-        [K in keyof TTree & string]:
-          | TTree[K]['events']
-          | AllEventsOf<TTree[K]['children'], [0, ...D]>;
-      }[keyof TTree & string];
+export type AllEventsOf<TTree extends StateTree, D extends DepthGuard = []> = D['length'] extends 8
+  ? never
+  : {
+      [K in keyof TTree & string]:
+        | TTree[K]['events']
+        | AllEventsOf<TTree[K]['children'], [0, ...D]>;
+    }[keyof TTree & string];
 
 /** ドットパスの状態 + その全祖先で有効なイベントの Union（最大8段）*/
-export type EventsAtPath<TTree extends StateTree, P extends string, D extends DepthGuard = []> =
-  D['length'] extends 8
-    ? string
-    : P extends `${infer H}.${infer T}`
-      ? H extends keyof TTree
-        ? TTree[H]['events'] | EventsAtPath<TTree[H]['children'], T, [0, ...D]>
-        : string
-      : P extends keyof TTree
-        ? TTree[P]['events']
-        : string;
+export type EventsAtPath<
+  TTree extends StateTree,
+  P extends string,
+  D extends DepthGuard = [],
+> = D['length'] extends 8
+  ? string
+  : P extends `${infer H}.${infer T}`
+    ? H extends keyof TTree
+      ? TTree[H]['events'] | EventsAtPath<TTree[H]['children'], T, [0, ...D]>
+      : string
+    : P extends keyof TTree
+      ? TTree[P]['events']
+      : string;
 
 /** machine 型から StateTree ブランドを取り出す（未付与なら基底 StateTree） */
 export type ExtractTree<TMachine> = TMachine extends { readonly [STATE_TREE]?: infer T }
@@ -94,7 +108,7 @@ export interface Inspector<
    */
   allowedEvents<K extends TState>(state: K): Array<EventsAtPath<TTree, K>>;
 
-  /** 指定状態から出る遷移一覧（ガード情報付き） */
+  /** 指定状態から出る遷移一覧（ガード・アクション情報付き） */
   transitionsFrom(state: TState): TransitionInfo[];
 
   /** 指定状態 + イベントで到達しうる全遷移先 */
@@ -154,6 +168,12 @@ export interface Inspector<
 
   /** 指定イベントがなぜ送れないかの説明文 */
   explainBlocked(snapshot: AnyMachineSnapshot, event: TEvent): string;
+
+  /**
+   * 現在有効な遷移ごとに「発火したら実行されるアクション名一覧」を返す。
+   * エフェクト層で何が起きるかを確認するデバッグ・テスト用途向け。
+   */
+  commands(snapshot: AnyMachineSnapshot): CommandInfo[];
 }
 
 // AnyMachineSnapshot を Inspector 型内で参照するために再エクスポート

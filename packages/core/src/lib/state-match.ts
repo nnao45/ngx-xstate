@@ -167,10 +167,7 @@ export interface Matcher<TTree extends StateTree, TEvent, TContext> {
    * 「ローディング中の振る舞い」「エラー時の振る舞い」を関数として分離し再利用できる。
    */
   pipe<A>(f: (m: Matcher<TTree, TEvent, TContext>) => A): A;
-  pipe<A, B>(
-    f1: (m: Matcher<TTree, TEvent, TContext>) => A,
-    f2: (a: A) => B,
-  ): B;
+  pipe<A, B>(f1: (m: Matcher<TTree, TEvent, TContext>) => A, f2: (a: A) => B): B;
   pipe<A, B, C>(
     f1: (m: Matcher<TTree, TEvent, TContext>) => A,
     f2: (a: A) => B,
@@ -332,9 +329,7 @@ function makeMatcher(
   isDone: boolean,
 ): Matcher<StateTree, unknown, unknown> {
   // fold だけは overload 対応のため関数を先に定義してキャストする
-  const foldImpl = (
-    cases: Record<string, ((scope: unknown) => unknown) | undefined>,
-  ): unknown => {
+  const foldImpl = (cases: Record<string, ((scope: unknown) => unknown) | undefined>): unknown => {
     for (const [key, fn] of Object.entries(cases)) {
       if (key === '_' || typeof fn !== 'function') continue;
       if (pathMatches(value, [...parentPath, key])) {
@@ -491,9 +486,11 @@ function makeMatcher(
 
     fallbackWith(fn) {
       if (matched.matched) return self;
-      return (fn as (ctx: unknown) => Matcher<StateTree, unknown, unknown>)(
-        context,
-      ) as Matcher<StateTree, unknown, unknown>;
+      return (fn as (ctx: unknown) => Matcher<StateTree, unknown, unknown>)(context) as Matcher<
+        StateTree,
+        unknown,
+        unknown
+      >;
     },
   };
   return self;

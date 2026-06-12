@@ -1,6 +1,7 @@
 import { createActor, createMachine, setup } from 'xstate';
 import { describe, expect, it } from 'vitest';
 import { inspect } from './inspect';
+import { explainGuard } from './explain-guard';
 
 // ─── テスト用マシン ────────────────────────────────────────────────────────────
 
@@ -100,8 +101,8 @@ describe('inspect.allowedEvents()', () => {
   it('includes parent-level events for nested states', () => {
     const ins = inspect(authMachine);
     const allowed = ins.allowedEvents('loggedIn.active');
-    expect(allowed).toContain('GO_IDLE');   // own
-    expect(allowed).toContain('LOGOUT');    // inherited from loggedIn
+    expect(allowed).toContain('GO_IDLE'); // own
+    expect(allowed).toContain('LOGOUT'); // inherited from loggedIn
   });
 
   it('does not include events from unrelated states', () => {
@@ -461,5 +462,162 @@ describe('inspect.explainBlocked()', () => {
     const snap = actor.getSnapshot();
     const msg = inspect(authMachine).explainBlocked(snap, 'LOGIN');
     expect(msg).toMatch(/enabled/iu);
+  });
+});
+
+// ─── TransitionInfo enriched fields ──────────────────────────────────────────
+
+describe('TransitionInfo.id / index / actions / guardLabel', () => {
+  it('id is unique per source::event::index', () => {
+    const ins = inspect(authMachine);
+    const ts = ins.transitionsFrom('loggedOut');
+    expect(ts[0]?.id).toBe('loggedOut::LOGIN::0');
+    expect(ts[0]?.index).toBe(0);
+  });
+
+  it('index distinguishes multiple guard transitions for same source+event', () => {
+    const multiGuard = setup({
+      guards: {
+        isA: () => true,
+        isB: () => false,
+      },
+    }).createMachine({
+      initial: 'idle',
+      states: {
+        idle: {
+          on: {
+            GO: [
+              { target: 'a', guard: 'isA' },
+              { target: 'b', guard: 'isB' },
+            ],
+          },
+        },
+        a: {},
+        b: {},
+      },
+    });
+    const ts = inspect(multiGuard).transitionsFrom('idle');
+    const goTransitions = ts.filter((t) => t.event === 'GO');
+    expect(goTransitions).toHaveLength(2);
+    expect(goTransitions[0]?.index).toBe(0);
+    expect(goTransitions[1]?.index).toBe(1);
+    expect(goTransitions[0]?.id).toBe('idle::GO::0');
+    expect(goTransitions[1]?.id).toBe('idle::GO::1');
+  });
+
+  it('actions lists action names on the transition', () => {
+    const actionMachine = setup({
+      actions: {
+        logLogin: () => {
+          /* noop */
+        },
+      },
+    }).createMachine({
+      initial: 'loggedOut',
+      states: {
+        loggedOut: {
+          on: { LOGIN: { target: 'loggedIn', actions: 'logLogin' } },
+        },
+        loggedIn: {},
+      },
+    });
+    const ts = inspect(actionMachine).transitionsFrom('loggedOut');
+    expect(ts[0]?.actions).toContain('logLogin');
+  });
+
+  it('guardLabel is populated by explainGuard()', () => {
+    // Use `(args) => ...` so TArgs is inferred as `unknown`; cast inside predicate.
+    const labelMachine = setup({
+      guards: {
+        cartNotEmpty: explainGuard(
+          'cartNotEmpty',
+          'cart must not be empty',
+          (args) => (args as { context: { cart: string[] } }).context.cart.length > 0,
+        ),
+      },
+    }).createMachine({
+      initial: 'checkout',
+      context: { cart: [] as string[] },
+      states: {
+        checkout: {
+          on: { SUBMIT: { target: 'paying', guard: 'cartNotEmpty' } },
+        },
+        paying: {},
+      },
+    });
+    const ts = inspect(labelMachine).transitionsFrom('checkout');
+    const submit = ts.find((t) => t.event === 'SUBMIT');
+    expect(submit?.guard).toBe('cartNotEmpty');
+    expect(submit?.guardLabel).toBe('cart must not be empty');
+  });
+
+  it('explainBlocked uses guardLabel when available', () => {
+    const labelMachine = setup({
+      guards: {
+        cartNotEmpty: explainGuard(
+          'cartNotEmpty',
+          'cart must not be empty',
+          (args) => (args as { context: { cart: string[] } }).context.cart.length > 0,
+        ),
+      },
+    }).createMachine({
+      initial: 'checkout',
+      context: { cart: [] as string[] },
+      states: {
+        checkout: {
+          on: { SUBMIT: { target: 'paying', guard: 'cartNotEmpty' } },
+        },
+        paying: {},
+      },
+    });
+    const actor = createActor(labelMachine).start();
+    const msg = inspect(labelMachine).explainBlocked(actor.getSnapshot(), 'SUBMIT');
+    expect(msg).toContain('cart must not be empty');
+  });
+});
+
+// ─── commands() ──────────────────────────────────────────────────────────────
+
+describe('inspect.commands()', () => {
+  it('returns action names for currently enabled transitions', () => {
+    const actionMachine = setup({
+      actions: {
+        logLogin: () => {
+          /* noop */
+        },
+      },
+    }).createMachine({
+      initial: 'loggedOut',
+      states: {
+        loggedOut: {
+          on: { LOGIN: { target: 'loggedIn', actions: 'logLogin' } },
+        },
+        loggedIn: {},
+      },
+    });
+    const actor = createActor(actionMachine).start();
+    const cmds = inspect(actionMachine).commands(actor.getSnapshot());
+    expect(cmds).toHaveLength(1);
+    expect(cmds[0]?.event).toBe('LOGIN');
+    expect(cmds[0]?.actions).toContain('logLogin');
+  });
+
+  it('returns empty array when no transitions are enabled', () => {
+    const machine = createMachine({
+      initial: 'done',
+      states: { done: { type: 'final' } },
+    });
+    const snap = createActor(machine).getSnapshot();
+    const cmds = inspect(machine).commands(snap);
+    expect(cmds).toEqual([]);
+  });
+
+  it('excludes guard-blocked transitions', () => {
+    const actor = createActor(guardedMachine).start();
+    const snap = actor.getSnapshot();
+    // SUBMIT is blocked by guard (context.ok = false), only RESET is enabled
+    const cmds = inspect(guardedMachine).commands(snap);
+    expect(cmds.map((c) => c.event)).toContain('RESET');
+    expect(cmds.map((c) => c.event)).not.toContain('SUBMIT');
   });
 });

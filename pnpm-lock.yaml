@@ -39,7 +39,7 @@ importers:
   packages/core:
     dependencies:
       xstate:
-        specifier: '>=5.0.0'
+        specifier: '>=5.32.0 <6'
         version: 5.32.0
       zod:
         specifier: '>=3.0.0'

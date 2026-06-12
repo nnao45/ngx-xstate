@@ -124,16 +124,12 @@ const fullMachine = typedSetup({
       on: {
         ADD_ITEM: {
           actions: assign({
-            items: ({ context, event }) => [
-              ...context.items,
-              { name: event.item, qty: event.qty },
-            ],
+            items: ({ context, event }) => [...context.items, { name: event.item, qty: event.qty }],
           }),
         },
         REMOVE_ITEM: {
           actions: assign({
-            items: ({ context, event }) =>
-              context.items.filter((i) => i.name !== event.item),
+            items: ({ context, event }) => context.items.filter((i) => i.name !== event.item),
           }),
         },
         CHECKOUT: 'checkout',
@@ -251,7 +247,7 @@ describe('InjectActorOptions.input コンパイル時型安全', () => {
     // @ts-expect-error: input なし machine に対して { anything: 'here' } は never に非対応
     const _c: InjectActorOptions<typeof noInputMachine> = { input: { anything: 'here' } };
 
-    void _a, _b, _c;
+    (void _a, _b, _c);
     expect(true).toBe(true);
   });
 });
