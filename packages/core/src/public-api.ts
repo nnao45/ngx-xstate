@@ -1,5 +1,6 @@
 // ─── 公開 API（framework 非依存） ──────────────────────────────────────────────
 export { typedSetup, noPayload } from './lib/typed-machine';
+export { assignWithValidate } from './lib/assign-with-validate';
 export { matchActor } from './lib/state-match';
 export { renderStateTree } from './lib/render-state-tree';
 export { renderMermaid } from './lib/render-mermaid';
